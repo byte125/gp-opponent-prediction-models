@@ -27,7 +27,7 @@ def main():
     likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(
         num_tasks=5)  # should be same as output_size
     gp_controller = GPControllerApproximate(sampGen, IndependentMultitaskGPModelApproximate, likelihood,
-                                            input_size=11, output_size=5, inducing_points=200, enable_GPU=True)
+                                            input_size=11, output_size=5, inducing_points=200, enable_GPU=False)
     # likelihood = gpytorch.likelihoods.GaussianLikelihood
     # gp_controller = GPControllerExact(sampGen, ExactGPModel, likelihood, 10, 5, True)
 

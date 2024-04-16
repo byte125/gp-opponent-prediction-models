@@ -25,7 +25,7 @@ from barcgp.common_control import run_pid_warmstart
 
 def main(args=None):
     ##############################################################################################################################################
-    use_GPU = True   
+    use_GPU = False   
     gen_scenario = True  # Controls whether to generate new scenario or use saved pkl
     predictor_class = GPPredictor  # Either None or one of trajectory_predictor classes
     use_predictions_from_module = True  # Set to true to use predictions generated from `predictor_class`, otherwise use true predictions from MPCC
