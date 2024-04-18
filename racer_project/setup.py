@@ -15,12 +15,13 @@ setup(
     zip_safe=True,
     maintainer='sd',
     maintainer_email='sdeepak@andrew.cmu.edu',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Dummy ROS2 node',
+    license='BSD',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ros2_node = racer_project.ros2_node:main'
+            # 'ros2_node = racer_project.ros2_node:main'
+            'gp_odometry_predictor = racer_project.gp_odometry_predictor:main'
         ],
     },
 )
