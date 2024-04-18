@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 import torch
 import gpytorch
-from barcgp.barcgp.prediction.gpytorch_models import SimpleGPModel, likelihood
+from barcgp import ExactGPModel, likelihood
 
 class GPTrajectoryNode(Node):
     def __init__(self):
@@ -12,7 +12,7 @@ class GPTrajectoryNode(Node):
         self.timer = self.create_timer(timer_period, self.timer_callback)
         
         # Load the model
-        self.model = SimpleGPModel(train_x=torch.linspace(0, 1, 100), train_y=None, likelihood=gpytorch.likelihoods.GaussianLikelihood())
+        self.model = ExactGPModel(train_x=torch.linspace(0, 1, 100), train_y=None, likelihood=gpytorch.likelihoods.GaussianLikelihood())
         self.model.load_state_dict(torch.load('model_state.pth'))
         self.model.eval()
 

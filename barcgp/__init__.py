@@ -1,0 +1,1 @@
+from .prediction.gpytorch_models import ExactGPModel

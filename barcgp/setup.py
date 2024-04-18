@@ -1,10 +1,10 @@
 # setup.py
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='barcgp',
     version='0.1',
-    packages=['barcgp'],
+    packages=find_packages(),
     install_requires=['numpy >= 1.19.5',
                       'matplotlib>=3.1.2',
                       'scipy>=1.4.1',
