@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 import torch
 import gpytorch
-from barcgp import ExactGPModel, likelihood
+from barcgp.prediction.gpytorch_models import ExactGPModel
 
 class GPTrajectoryNode(Node):
     def __init__(self):
@@ -13,7 +13,7 @@ class GPTrajectoryNode(Node):
         
         # Load the model
         self.model = ExactGPModel(train_x=torch.linspace(0, 1, 100), train_y=None, likelihood=gpytorch.likelihoods.GaussianLikelihood())
-        self.model.load_state_dict(torch.load('model_state.pth'))
+        self.model.load_state_dict(torch.load('/home/sd/barc_data/trainingData/models/aggressive_blocking.pkl'))
         self.model.eval()
 
     def timer_callback(self):
