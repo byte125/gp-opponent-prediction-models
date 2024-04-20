@@ -1,1 +1,1 @@
-from .prediction.gpytorch_models import ExactGPModel
+from .prediction.gpytorch_models import IndependentMultitaskGPModelApproximate
