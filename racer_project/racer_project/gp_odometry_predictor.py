@@ -10,7 +10,8 @@ from barcgp.prediction.gpytorch_models import IndependentMultitaskGPModelApproxi
 from barcgp.prediction.trajectory_predictor import GPPredictor  # Ensure this is defined somewhere in your project
 from barcgp.common.utils.scenario_utils import ScenarioDefinition
 from barcgp.common.tracks.track_lib import StraightTrack
-from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVelocity
+from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVelocity, VehiclePrediction
+from barcgp.controllers.MPCC_H2H_approx import MPCC_H2H_approx
 
 class GPOdometryPredictor(Node):
     def __init__(self):
@@ -69,6 +70,11 @@ class GPOdometryPredictor(Node):
             ego_obs_avoid_d=0.1,
             tar_obs_avoid_d=0.1
         )
+
+        # TODO:Have to fill ego dynamics model and params
+        self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_name)
+        self.gp_mpcc_ego_controller.initialize()
+
         self.predictor = GPPredictor(N=N, track=track_obj, policy_name=policy_name, use_GPU=use_GPU, M=M, cov_factor=np.sqrt(2))
         # self.model = IndependentMultitaskGPModelApproximate(inducing_points_num, input_dim, num_tasks)
         # self.model.eval()  # Set the model to evaluation mode if not training
@@ -83,7 +89,32 @@ class GPOdometryPredictor(Node):
         # Format the input tensor for the model
         # Note: The input tensor shape should match the expected input dimensions of the model
         input_tensor = torch.tensor([[x, y, z]], dtype=torch.float32)
+        
+        # Fill this with ego vehicle state data
+        s = 0.0
+        x_tran = 0.0
+        e_psi = 0.0
+        v_long = 0.0
+        time_elapsed = 0.0
+        ego_state = VehicleState(t=time_elapsed,
+                                 p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
+                                 v=BodyLinearVelocity(v_long=v_long))
+        
+        # Fill this with target vehicle state data
+        s = 1.0
+        x_tran = 0.0
+        e_psi = 0.0
+        v_long = 0.0
+        time_elapsed = 0.0
+        tar_sim_state = VehicleState(t=time_elapsed,
+                                      p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
+                                      v=BodyLinearVelocity(v_long=v_long))
 
+        # Get the ego vehicle's predicted path using MPCC
+        # TODO: Fill the ego_pred object with the MPCC prediction
+        ego_pred = VehiclePrediction()
+        tv_pred = self.predictor.get_prediction(ego_state, tar_sim_state, ego_pred)
+        print (tv_pred)
         # Perform prediction
         with torch.no_grad():  # Use torch.no_grad to prevent gradient calculations
             prediction = self.model(input_tensor)
