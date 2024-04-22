@@ -130,3 +130,8 @@ dmypy.json
 
 # FORCES
 *.forces
+
+.vscode
+models/
+mpcc_h2h_ego/
+mpcc_h2h_tv/
