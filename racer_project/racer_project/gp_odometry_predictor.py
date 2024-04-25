@@ -2,7 +2,7 @@ import torch
 import gpytorch
 from rclpy.node import Node
 import rclpy
-import pickle
+# import pickle
 import os
 import numpy as np
 from nav_msgs.msg import Odometry
@@ -12,6 +12,9 @@ from barcgp.common.utils.scenario_utils import ScenarioDefinition
 from barcgp.common.tracks.track_lib import StraightTrack
 from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVelocity, VehiclePrediction
 from barcgp.controllers.MPCC_H2H_approx import MPCC_H2H_approx
+from barcgp.simulation.dynamics_simulator import DynamicsSimulator
+from barcgp.h2h_configs import *
+from barcgp.common.utils.file_utils import *
 
 class GPOdometryPredictor(Node):
     def __init__(self):
@@ -27,7 +30,7 @@ class GPOdometryPredictor(Node):
         input_dim = 3  # Assuming you're using 3D position data (x, y, z)
         num_tasks = 5  # Number of tasks/output dimensions
         ##############################################################################################################################################
-        use_GPU = True   
+        use_GPU = False   
         policy_name = "aggressive_blocking"
         M = 50  # Number of samples for GP
         T = 20  # Max number of seconds to run experiment
@@ -70,6 +73,15 @@ class GPOdometryPredictor(Node):
             ego_obs_avoid_d=0.1,
             tar_obs_avoid_d=0.1
         )
+        
+        scenario_sim_data = pickle_read('/home/sd/barc_data/testcurve.pkl')
+        scenario = scenario_sim_data.scenario_def
+
+        track_name = scenario.track_type
+        track_obj = scenario.track
+
+        ego_dynamics_simulator = DynamicsSimulator(t, ego_dynamics_config, track=track_obj)
+        tar_dynamics_simulator = DynamicsSimulator(t, tar_dynamics_config, track=track_obj)
 
         # TODO:Have to fill ego dynamics model and params
         self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_name)
