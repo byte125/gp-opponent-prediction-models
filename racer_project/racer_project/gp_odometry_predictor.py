@@ -74,23 +74,28 @@ class GPOdometryPredictor(Node):
             tar_obs_avoid_d=0.1
         )
         
-        scenario_sim_data = pickle_read('/home/sd/barc_data/testcurve.pkl')
-        scenario = scenario_sim_data.scenario_def
+        scen = track_obj.track
+        
+        # scenario_sim_data = pickle_read('/home/sd/barc_data/testcurve.pkl')
+        # scenario = scenario_sim_data.scenario_def
 
-        track_name = scenario.track_type
-        track_obj = scenario.track
+        # track_name = scenario.track_type
+        # track_obj = scenario.track
 
-        ego_dynamics_simulator = DynamicsSimulator(t, ego_dynamics_config, track=track_obj)
-        tar_dynamics_simulator = DynamicsSimulator(t, tar_dynamics_config, track=track_obj)
+        ego_dynamics_simulator = DynamicsSimulator(t, ego_dynamics_config, track=scen)
+        tar_dynamics_simulator = DynamicsSimulator(t, tar_dynamics_config, track=scen)
 
         # TODO:Have to fill ego dynamics model and params
-        self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_name)
+        self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj.track, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_obj.track_type)
         self.gp_mpcc_ego_controller.initialize()
 
         self.predictor = GPPredictor(N=N, track=track_obj, policy_name=policy_name, use_GPU=use_GPU, M=M, cov_factor=np.sqrt(2))
         # self.model = IndependentMultitaskGPModelApproximate(inducing_points_num, input_dim, num_tasks)
         # self.model.eval()  # Set the model to evaluation mode if not training
 
+    # Function to initialize arrays with a single zero
+    def zero_array(self):
+        return array.array('f', [0.0])
 
     def listener_callback(self, msg):
         # Extract position data from Odometry message
@@ -124,8 +129,34 @@ class GPOdometryPredictor(Node):
 
         # Get the ego vehicle's predicted path using MPCC
         # TODO: Fill the ego_pred object with the MPCC prediction
-        ego_pred = self.gp_mpcc_ego_controller.get_prediction()
+        ego_pred = VehiclePrediction()
+        # Set all attributes to zero
+        ego_pred.t = 0.0
+        ego_pred.x = self.zero_array()
+        ego_pred.y = self.zero_array()
+        ego_pred.v_x = self.zero_array()
+        ego_pred.v_y = self.zero_array()
+        ego_pred.a_x = self.zero_array()
+        ego_pred.a_y = self.zero_array()
+        ego_pred.psi = self.zero_array()
+        ego_pred.psidot = self.zero_array()
+        ego_pred.v_long = self.zero_array()
+        ego_pred.v_tran = self.zero_array()
+        ego_pred.a_long = self.zero_array()
+        ego_pred.a_tran = self.zero_array()
+        ego_pred.e_psi = self.zero_array()
+        ego_pred.s = self.zero_array()
+        ego_pred.x_tran = self.zero_array()
+        ego_pred.u_a = self.zero_array()
+        ego_pred.u_steer = self.zero_array()
+        ego_pred.lap_num = 0
+        ego_pred.sey_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
+        ego_pred.xy_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
+
+# You can now use vehicle_prediction with all values initialized to zero
+
         tv_pred = self.predictor.get_prediction(ego_state, tar_sim_state, ego_pred)
+        print (tv_pred)
         # Perform prediction
         with torch.no_grad():  # Use torch.no_grad to prevent gradient calculations
             prediction = self.model(input_tensor)
