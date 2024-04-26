@@ -124,7 +124,8 @@ class GPOdometryPredictor(Node):
 
         # Get the ego vehicle's predicted path using MPCC
         # TODO: Fill the ego_pred object with the MPCC prediction
-        ego_pred = VehiclePrediction()
+        ego_pred = self.gp_mpcc_ego_controller.get_prediction()
+        print("EGO pred ", ego_pred)
         tv_pred = self.predictor.get_prediction(ego_state, tar_sim_state, ego_pred)
         print (tv_pred)
         # Perform prediction
