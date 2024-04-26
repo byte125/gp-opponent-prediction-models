@@ -8,17 +8,32 @@ import numpy as np
 from nav_msgs.msg import Odometry
 from barcgp.prediction.gpytorch_models import IndependentMultitaskGPModelApproximate  # Ensure this is defined somewhere in your project
 from barcgp.prediction.trajectory_predictor import GPPredictor  # Ensure this is defined somewhere in your project
-from barcgp.common.utils.scenario_utils import ScenarioDefinition
+from barcgp.common.utils.scenario_utils import ScenarioDefinition, ScenarioGenerator, ScenarioGenParams
 from barcgp.common.tracks.track_lib import StraightTrack
 from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVelocity, VehiclePrediction
 from barcgp.controllers.MPCC_H2H_approx import MPCC_H2H_approx
 from barcgp.simulation.dynamics_simulator import DynamicsSimulator
 from barcgp.h2h_configs import *
 from barcgp.common.utils.file_utils import *
+from barcgp.common_control import run_pid_warmstart
 
 class GPOdometryPredictor(Node):
     def __init__(self):
         super().__init__('gp_odometry_predictor')
+        
+        tarMin = VehicleState(t=0.0,
+                      p=ParametricPose(s=offset + 0.9, x_tran=-.3 * width, e_psi=-0.02),
+                      v=BodyLinearVelocity(v_long=0.5*factor))
+        tarMax = VehicleState(t=0.0,
+                            p=ParametricPose(s=offset + 1.2, x_tran=.3* width, e_psi=0.02),
+                            v=BodyLinearVelocity(v_long=1.0*factor))
+        egoMin = VehicleState(t=0.0,
+                            p=ParametricPose(s=offset + 0.2, x_tran=-.3 * width, e_psi=-0.02),
+                            v=BodyLinearVelocity(v_long=0.5*factor))
+        egoMax = VehicleState(t=0.0,
+                            p=ParametricPose(s=offset + 0.4, x_tran=.3 * width, e_psi=0.02),
+                            v=BodyLinearVelocity(v_long=1.0*factor))
+        
         self.subscription = self.create_subscription(
             Odometry,
             '/ego_racecar/odom',
@@ -65,16 +80,23 @@ class GPOdometryPredictor(Node):
         # Slack is between 0 and 1, allows for constraint violation (1 is no constraint violation)
         # This generates a scenario with a straight track, which can be passed as track_obj
         # I dont know what phase_out, ego_obs_avoid_d, tar_obs_avoid_d are, so I set them to default values
-        track_obj = ScenarioDefinition(
-            track_type='straight',
-            track=StraightTrack(length=10, width=100.0, slack=0.8, phase_out=True),
-            ego_init_state=ego_init_state,
-            tar_init_state=tar_init_state,
-            ego_obs_avoid_d=0.1,
-            tar_obs_avoid_d=0.1
-        )
+        straight_track = StraightTrack(length=10, width=100.0, slack=0.8, phase_out=True)
+        # track_obj = ScenarioDefinition(
+        #     track_type='straight',
+        #     track=straight_track,
+        #     ego_init_state=ego_init_state,
+        #     tar_init_state=tar_init_state,
+        #     ego_obs_avoid_d=0.1,
+        #     tar_obs_avoid_d=0.1
+        # )
         
-        scen = track_obj.track
+        scen_params = ScenarioGenParams(types=['track'], egoMin=egoMin, egoMax=egoMax, tarMin=tarMin, tarMax=tarMax, width=100.0)
+        scen_gen = ScenarioGenerator(scen_params)
+        scenario = scen_gen.genScenario()
+        track_name = scenario.track_type
+        track_obj = scenario.track
+        
+        # scen = track_obj.track
         
         # scenario_sim_data = pickle_read('/home/sd/barc_data/testcurve.pkl')
         # scenario = scenario_sim_data.scenario_def
@@ -82,12 +104,21 @@ class GPOdometryPredictor(Node):
         # track_name = scenario.track_type
         # track_obj = scenario.track
 
-        ego_dynamics_simulator = DynamicsSimulator(t, ego_dynamics_config, track=scen)
-        tar_dynamics_simulator = DynamicsSimulator(t, tar_dynamics_config, track=scen)
+        ego_dynamics_simulator = DynamicsSimulator(t, ego_dynamics_config, track=straight_track)
+        tar_dynamics_simulator = DynamicsSimulator(t, tar_dynamics_config, track=straight_track)
+
+        # scenario = straight_track
+        tv_history, ego_history, vehiclestate_history, ego_sim_state, tar_sim_state, egost_list, tarst_list = \
+        run_pid_warmstart(scenario, ego_dynamics_simulator, tar_dynamics_simulator, n_iter=n_iter, t=t)
+        self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_name)
+        self.gp_mpcc_ego_controller.initialize()
+
+        self.gp_mpcc_ego_controller.set_warm_start(*ego_history)
+        self.ego_pred = self.gp_mpcc_ego_controller.get_prediction()
 
         # TODO:Have to fill ego dynamics model and params
-        self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj.track, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_obj.track_type)
-        self.gp_mpcc_ego_controller.initialize()
+        # self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj.track, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_obj.track_type)
+        # self.gp_mpcc_ego_controller.initialize()
 
         self.predictor = GPPredictor(N=N, track=track_obj, policy_name=policy_name, use_GPU=use_GPU, M=M, cov_factor=np.sqrt(2))
         # self.model = IndependentMultitaskGPModelApproximate(inducing_points_num, input_dim, num_tasks)
@@ -129,33 +160,33 @@ class GPOdometryPredictor(Node):
 
         # Get the ego vehicle's predicted path using MPCC
         # TODO: Fill the ego_pred object with the MPCC prediction
-        ego_pred = VehiclePrediction()
-        # Set all attributes to zero
-        ego_pred.t = 0.0
-        ego_pred.x = self.zero_array()
-        ego_pred.y = self.zero_array()
-        ego_pred.v_x = self.zero_array()
-        ego_pred.v_y = self.zero_array()
-        ego_pred.a_x = self.zero_array()
-        ego_pred.a_y = self.zero_array()
-        ego_pred.psi = self.zero_array()
-        ego_pred.psidot = self.zero_array()
-        ego_pred.v_long = self.zero_array()
-        ego_pred.v_tran = self.zero_array()
-        ego_pred.a_long = self.zero_array()
-        ego_pred.a_tran = self.zero_array()
-        ego_pred.e_psi = self.zero_array()
-        ego_pred.s = self.zero_array()
-        ego_pred.x_tran = self.zero_array()
-        ego_pred.u_a = self.zero_array()
-        ego_pred.u_steer = self.zero_array()
-        ego_pred.lap_num = 0
-        ego_pred.sey_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
-        ego_pred.xy_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
+        # ego_pred = VehiclePrediction()
+        # # Set all attributes to zero
+        # ego_pred.t = 0.0
+        # ego_pred.x = self.zero_array()
+        # ego_pred.y = self.zero_array()
+        # ego_pred.v_x = self.zero_array()
+        # ego_pred.v_y = self.zero_array()
+        # ego_pred.a_x = self.zero_array()
+        # ego_pred.a_y = self.zero_array()
+        # ego_pred.psi = self.zero_array()
+        # ego_pred.psidot = self.zero_array()
+        # ego_pred.v_long = self.zero_array()
+        # ego_pred.v_tran = self.zero_array()
+        # ego_pred.a_long = self.zero_array()
+        # ego_pred.a_tran = self.zero_array()
+        # ego_pred.e_psi = self.zero_array()
+        # ego_pred.s = self.zero_array()
+        # ego_pred.x_tran = self.zero_array()
+        # ego_pred.u_a = self.zero_array()
+        # ego_pred.u_steer = self.zero_array()
+        # ego_pred.lap_num = 0
+        # ego_pred.sey_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
+        # ego_pred.xy_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
 
 # You can now use vehicle_prediction with all values initialized to zero
 
-        tv_pred = self.predictor.get_prediction(ego_state, tar_sim_state, ego_pred)
+        tv_pred = self.predictor.get_prediction(ego_state, tar_sim_state, self.ego_pred)
         print (tv_pred)
         # Perform prediction
         with torch.no_grad():  # Use torch.no_grad to prevent gradient calculations
