@@ -21,16 +21,16 @@ class GPOdometryPredictor(Node):
     def __init__(self):
         super().__init__('gp_odometry_predictor')
         
-        tarMin = VehicleState(t=0.0,
-                      p=ParametricPose(s=offset + 0.9, x_tran=-.3 * width, e_psi=-0.02),
-                      v=BodyLinearVelocity(v_long=0.5*factor))
-        tarMax = VehicleState(t=0.0,
+        self.tarMin = VehicleState(t=0.0,
+                            p=ParametricPose(s=offset + 0.9, x_tran=-.3 * width, e_psi=-0.02),
+                            v=BodyLinearVelocity(v_long=0.5*factor))
+        self.tarMax = VehicleState(t=0.0,
                             p=ParametricPose(s=offset + 1.2, x_tran=.3* width, e_psi=0.02),
                             v=BodyLinearVelocity(v_long=1.0*factor))
-        egoMin = VehicleState(t=0.0,
+        self.egoMin = VehicleState(t=0.0,
                             p=ParametricPose(s=offset + 0.2, x_tran=-.3 * width, e_psi=-0.02),
                             v=BodyLinearVelocity(v_long=0.5*factor))
-        egoMax = VehicleState(t=0.0,
+        self.egoMax = VehicleState(t=0.0,
                             p=ParametricPose(s=offset + 0.4, x_tran=.3 * width, e_psi=0.02),
                             v=BodyLinearVelocity(v_long=1.0*factor))
         
@@ -40,32 +40,30 @@ class GPOdometryPredictor(Node):
             self.listener_callback,
             10)
 
-        # Parameters for the model
-        inducing_points_num = 200
-        input_dim = 3  # Assuming you're using 3D position data (x, y, z)
-        num_tasks = 5  # Number of tasks/output dimensions
+        # # Parameters for the model
+        # inducing_points_num = 200
+        # input_dim = 3  # Assuming you're using 3D position data (x, y, z)
+        # num_tasks = 5  # Number of tasks/output dimensions
         ##############################################################################################################################################
         use_GPU = False   
         policy_name = "aggressive_blocking"
-        M = 50  # Number of samples for GP
-        T = 20  # Max number of seconds to run experiment
-        t = 0  # Initial time increment
-        N = 10  # Number of samples for GP
+        self.M = 50  # Number of samples for GP
+        self.T = 20  # Max number of seconds to run experiment
+        self.t = 0  # Initial time increment
+        self.N = 10  # Number of samples for GP
         ##############################################################################################################################################
+        # train_x = torch.rand(10, input_dim)  # Random training data inputs
+        # train_y = torch.zeros(10, num_tasks)  # Placeholder training data outputs
 
-        # Placeholder for demonstration, adjust as needed
-        train_x = torch.rand(10, input_dim)  # Random training data inputs
-        train_y = torch.zeros(10, num_tasks)  # Placeholder training data outputs
-
-        # Initialize the likelihood and GP model
-        likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=num_tasks)
+        # # Initialize the likelihood and GP model
+        # likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=num_tasks)
 
         # s, x_tran, e_psi, v_long need to be set to the start values, for both EV and TV
         s = 0.0
         x_tran = 0.0
         e_psi = 0.0
         v_long = 0.0
-        ego_init_state = VehicleState(t=0.0,
+        self.ego_init_state = VehicleState(t=0.0,
                                       p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
                                       v=BodyLinearVelocity(v_long=v_long))
         
@@ -73,14 +71,14 @@ class GPOdometryPredictor(Node):
         x_tran = 0.0
         e_psi = 0.0
         v_long = 0.0
-        tar_init_state = VehicleState(t=0.0,
+        self.tar_init_state = VehicleState(t=0.0,
                                       p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
                                       v=BodyLinearVelocity(v_long=v_long))
 
         # Slack is between 0 and 1, allows for constraint violation (1 is no constraint violation)
         # This generates a scenario with a straight track, which can be passed as track_obj
         # I dont know what phase_out, ego_obs_avoid_d, tar_obs_avoid_d are, so I set them to default values
-        straight_track = StraightTrack(length=10, width=100.0, slack=0.8, phase_out=True)
+        self.straight_track = StraightTrack(length=10, width=100.0, slack=0.8, phase_out=True)
         # track_obj = ScenarioDefinition(
         #     track_type='straight',
         #     track=straight_track,
@@ -90,40 +88,68 @@ class GPOdometryPredictor(Node):
         #     tar_obs_avoid_d=0.1
         # )
         
-        scen_params = ScenarioGenParams(types=['track'], egoMin=egoMin, egoMax=egoMax, tarMin=tarMin, tarMax=tarMax, width=100.0)
-        scen_gen = ScenarioGenerator(scen_params)
-        scenario = scen_gen.genScenario()
-        track_name = scenario.track_type
-        track_obj = scenario.track
+        self.scen_params = ScenarioGenParams(types=['track'], egoMin=self.egoMin, egoMax=self.egoMax, tarMin=self.tarMin, tarMax=self.tarMax, width=100.0)
+        self.scen_gen = ScenarioGenerator(self.scen_params)
+        self.scenario = self.scen_gen.genScenario()
         
-        # scen = track_obj.track
-        
-        # scenario_sim_data = pickle_read('/home/sd/barc_data/testcurve.pkl')
-        # scenario = scenario_sim_data.scenario_def
+        track_name = self.scenario.track_type
+        track_obj = self.scenario.track
 
-        # track_name = scenario.track_type
-        # track_obj = scenario.track
-
-        ego_dynamics_simulator = DynamicsSimulator(t, ego_dynamics_config, track=straight_track)
-        tar_dynamics_simulator = DynamicsSimulator(t, tar_dynamics_config, track=straight_track)
+        self.ego_dynamics_simulator = DynamicsSimulator(self.t, ego_dynamics_config, track=track_obj)
+        self.tar_dynamics_simulator = DynamicsSimulator(self.t, tar_dynamics_config, track=track_obj)
 
         # scenario = straight_track
-        tv_history, ego_history, vehiclestate_history, ego_sim_state, tar_sim_state, egost_list, tarst_list = \
-        run_pid_warmstart(scenario, ego_dynamics_simulator, tar_dynamics_simulator, n_iter=n_iter, t=t)
-        self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_name)
+        self.tv_history, self.ego_history, self.vehiclestate_history, self.ego_sim_state, self.tar_sim_state, self.egost_list, self.tarst_list = \
+        run_pid_warmstart(self.scenario, self.ego_dynamics_simulator, self.tar_dynamics_simulator, n_iter=n_iter, t=self.t)
+        
+        self.gp_mpcc_ego_params = MPCCApproxFullModelParams(
+            dt=dt,
+            all_tracks=all_tracks,
+            solver_dir='' if rebuild else '~/.mpclab_controllers/gp_mpcc_h2h_ego',
+            # solver_dir='',
+            optlevel=2,
+
+            N=N,
+            Qc=50,
+            Ql=500.0,
+            Q_theta=200.0,
+            Q_xref=0.0,
+            R_d=2.0,
+            R_delta=20.0,
+
+            slack=True,
+            l_cs=5,
+            Q_cs=2.0,
+            Q_vmax=200.0,
+            vlong_max_soft=1.4,
+            Q_ts=500.0,
+            Q_cs_e=8.0,
+            l_cs_e=35.0,
+
+            u_a_max=0.55,
+            vx_max=1.6,
+            u_a_min=-1,
+            u_steer_max=0.435,
+            u_steer_min=-0.435,
+            u_a_rate_max=10,
+            u_a_rate_min=-10,
+            u_steer_rate_max=2,
+            u_steer_rate_min=-2
+        )
+        
+        self.gp_mpcc_ego_controller = MPCC_H2H_approx(self.ego_dynamics_simulator.model, track_obj, self.gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_name)
         self.gp_mpcc_ego_controller.initialize()
 
-        self.gp_mpcc_ego_controller.set_warm_start(*ego_history)
+        self.gp_mpcc_ego_controller.set_warm_start(*self.ego_history)
+        
+        # We should not be calling get_prediction immediately after this I think, need 
+        # to call other functions
+        
+        self.predictor = GPPredictor(N=10, track=track_obj, policy_name=policy_name, use_GPU=use_GPU, M=self.M, cov_factor=np.sqrt(2))
+
         self.ego_pred = self.gp_mpcc_ego_controller.get_prediction()
 
-        # TODO:Have to fill ego dynamics model and params
-        # self.gp_mpcc_ego_controller = MPCC_H2H_approx(ego_dynamics_simulator.model, track_obj.track, gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=track_obj.track_type)
-        # self.gp_mpcc_ego_controller.initialize()
-
-        self.predictor = GPPredictor(N=N, track=track_obj, policy_name=policy_name, use_GPU=use_GPU, M=M, cov_factor=np.sqrt(2))
-        # self.model = IndependentMultitaskGPModelApproximate(inducing_points_num, input_dim, num_tasks)
-        # self.model.eval()  # Set the model to evaluation mode if not training
-
+        
     # Function to initialize arrays with a single zero
     def zero_array(self):
         return array.array('f', [0.0])
@@ -133,68 +159,62 @@ class GPOdometryPredictor(Node):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         z = msg.pose.pose.position.z
-
-        # Format the input tensor for the model
-        # Note: The input tensor shape should match the expected input dimensions of the model
-        input_tensor = torch.tensor([[x, y, z]], dtype=torch.float32)
         
-        # Fill this with ego vehicle state data
-        s = 0.0
-        x_tran = 0.0
-        e_psi = 0.0
-        v_long = 0.0
-        time_elapsed = 0.0
-        ego_state = VehicleState(t=time_elapsed,
-                                 p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
-                                 v=BodyLinearVelocity(v_long=v_long))
-        
-        # Fill this with target vehicle state data
-        s = 1.0
-        x_tran = 0.0
-        e_psi = 0.0
-        v_long = 0.0
-        time_elapsed = 0.0
-        tar_sim_state = VehicleState(t=time_elapsed,
-                                      p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
-                                      v=BodyLinearVelocity(v_long=v_long))
-
-        # Get the ego vehicle's predicted path using MPCC
-        # TODO: Fill the ego_pred object with the MPCC prediction
-        # ego_pred = VehiclePrediction()
-        # # Set all attributes to zero
-        # ego_pred.t = 0.0
-        # ego_pred.x = self.zero_array()
-        # ego_pred.y = self.zero_array()
-        # ego_pred.v_x = self.zero_array()
-        # ego_pred.v_y = self.zero_array()
-        # ego_pred.a_x = self.zero_array()
-        # ego_pred.a_y = self.zero_array()
-        # ego_pred.psi = self.zero_array()
-        # ego_pred.psidot = self.zero_array()
-        # ego_pred.v_long = self.zero_array()
-        # ego_pred.v_tran = self.zero_array()
-        # ego_pred.a_long = self.zero_array()
-        # ego_pred.a_tran = self.zero_array()
-        # ego_pred.e_psi = self.zero_array()
-        # ego_pred.s = self.zero_array()
-        # ego_pred.x_tran = self.zero_array()
-        # ego_pred.u_a = self.zero_array()
-        # ego_pred.u_steer = self.zero_array()
-        # ego_pred.lap_num = 0
-        # ego_pred.sey_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
-        # ego_pred.xy_cov = np.zeros((1, 1))  # Adjust the dimensions as needed
-
-# You can now use vehicle_prediction with all values initialized to zero
-
-        tv_pred = self.predictor.get_prediction(ego_state, tar_sim_state, self.ego_pred)
-        print (tv_pred)
         # Perform prediction
-        with torch.no_grad():  # Use torch.no_grad to prevent gradient calculations
-            prediction = self.model(input_tensor)
+        
+        gp_tarpred_list = [None] * n_iter
+        egopred_list = [None] * n_iter
+        tarpred_list = [None] * n_iter
+        
+        ego_prediction, tar_prediction, tv_pred = None, None, None
+        while self.t < self.T:
+            if self.tar_sim_state.p.s >= 1.9 * self.scenario.length or self.ego_sim_state.p.s >= 1.9 * self.scenario.length:
+                break
+            else:
+                if self.predictor:
+                    ego_pred = self.gp_mpcc_ego_controller.get_prediction()
+                    print("Ego pred", ego_pred)
+                    if ego_pred.s is not None:
+                        tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
+                        gp_tarpred_list.append(tv_pred.copy())
+                    else:
+                        gp_tarpred_list.append(None)
 
-        # Print or process the prediction
-        print(f"Predicted Mean: {prediction.mean}")
-        print(f"Predicted Covariance: {prediction.covariance_matrix}")
+                # # Target agent
+                # info, b, exitflag = mpcc_tv_controller.step(tar_sim_state, tv_state=ego_sim_state, tv_pred=ego_prediction, policy=policy_name)
+                # if not info["success"]:
+                #     print(f"TV infeasible - Exitflag: {exitflag}")
+                #     pass
+
+                # Ego agent
+                info, b, exitflag = self.gp_mpcc_ego_controller.step(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
+                if not info["success"]:
+                    print(f"EGO infeasible - Exitflag: {exitflag}")
+                    pass
+                    # return
+
+                # step forward
+                # tar_prediction = mpcc_tv_controller.get_prediction().copy()
+                # tar_prediction.t = tar_sim_state.t
+                # tar_dynamics_simulator.step(tar_sim_state)
+                # track_obj.update_curvature(tar_sim_state)
+
+                ego_prediction = self.gp_mpcc_ego_controller.get_prediction().copy()
+                ego_prediction.t = self.ego_sim_state.t
+                self.ego_dynamics_simulator.step(self.ego_sim_state)
+
+                # log states
+                self.egost_list.append(self.ego_sim_state.copy())
+                self.tarst_list.append(self.tar_sim_state.copy())
+                egopred_list.append(ego_prediction)
+                tarpred_list.append(tar_prediction)
+                print(f"Current time: {round(self.ego_sim_state.t, 2)}")
+        # with torch.no_grad():  # Use torch.no_grad to prevent gradient calculations
+        #     prediction = self.model(input_tensor)
+
+        # # Print or process the prediction
+        # print(f"Predicted Mean: {prediction.mean}")
+        # print(f"Predicted Covariance: {prediction.covariance_matrix}")
 
 
 def main(args=None):

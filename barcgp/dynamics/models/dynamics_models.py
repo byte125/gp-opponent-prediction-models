@@ -421,6 +421,7 @@ class CasadiDynamicBicycleFull(CasadiDynamicsModel):
 
     def qu2prediction(self, prediction: VehiclePrediction, q: np.ndarray = None, u: np.ndarray = None):
         if q is not None:
+            print("q is not None")
             prediction.v_long = array.array('d', q[:, 0])
             prediction.v_tran = array.array('d', q[:, 1])
             prediction.psidot = array.array('d', q[:, 2])
@@ -430,9 +431,14 @@ class CasadiDynamicBicycleFull(CasadiDynamicsModel):
             prediction.e_psi = array.array('d', q[:, 6])
             prediction.s = array.array('d', q[:, 7])
             prediction.x_tran = array.array('d', q[:, 8])
+        else:
+            print("q is None")
         if u is not None:
+            print("u is not None")
             prediction.u_a = array.array('d', u[:, 0])
             prediction.u_steer = array.array('d', u[:, 1])
+        else:
+            print("u is None")
 
 class CasadiDynamicCLBicycle(CasadiDynamicsModel):
     '''

@@ -166,7 +166,7 @@ class MPCC_H2H_approx(AbstractController):
             raise (RuntimeError(
                 'Warm start input sequence of shape (%i,%i) is incompatible with required shape (%i,%i)' % (
                     u_ws.shape[0], u_ws.shape[1], self.N, self.d)))
-
+        
         self.x_ws = x_ws
         self.u_ws = u_ws
 

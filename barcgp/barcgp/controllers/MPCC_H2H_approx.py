@@ -133,8 +133,10 @@ class MPCC_H2H_approx(AbstractController):
         self.options = None
         self.solver = None
         if name is None:
+            print("HERE1")
             self.solver_name = 'MPCC_H2H_solver_forces_pro'
         else:
+            print("HERE2")
             self.solver_name = name
         self.state_input_prediction = VehiclePrediction()
 
