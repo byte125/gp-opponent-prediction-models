@@ -138,11 +138,15 @@ class GPOdometryPredictor(Node):
         # Note: The input tensor shape should match the expected input dimensions of the model
         input_tensor = torch.tensor([[x, y, z]], dtype=torch.float32)
         
+        # TODO - Yash and Jai to figure out what inputs to give to the model
+        # s, x_tran, e_psi and v_long
+        
         # Fill this with ego vehicle state data
         s = 0.0
         x_tran = 0.0
         e_psi = 0.0
         v_long = 0.0
+        
         time_elapsed = 0.0
         ego_state = VehicleState(t=time_elapsed,
                                  p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
