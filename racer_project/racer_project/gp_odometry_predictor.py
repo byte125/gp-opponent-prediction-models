@@ -46,8 +46,9 @@ class GPOdometryPredictor(Node):
             self.ego_listener_callback,
             10)
         
-        self.pub_drive = self.create_publisher(AckermannDriveStamped, '/drive', 10)
-
+        self.pub_drive_ego = self.create_publisher(AckermannDriveStamped, '/drive', 10)
+        self.pub_drive_tar = self.create_publisher(AckermannDriveStamped, '/opp_drive', 10)
+        
         # self.subscription_opp = self.create_subscription(
         #     Odometry,
         #     '/ego_racecar/opp_odom',
@@ -101,7 +102,7 @@ class GPOdometryPredictor(Node):
         # scenario = straight_track
         self.tv_history, self.ego_history, self.vehiclestate_history, self.ego_sim_state, self.tar_sim_state, self.egost_list, self.tarst_list = \
         run_pid_warmstart(self.scenario, self.ego_dynamics_simulator, self.tar_dynamics_simulator, n_iter=n_iter, t=self.t)
-        
+
         self.gp_mpcc_ego_params = MPCCApproxFullModelParams(
             dt=dt,
             all_tracks=all_tracks,
@@ -235,9 +236,15 @@ class GPOdometryPredictor(Node):
                 new_drive_message = AckermannDriveStamped()
                 new_drive_message.drive.acceleration = ego_acc
                 new_drive_message.drive.steering_angle = ego_steering_angle
-                # new_drive_message.drive.speed = 0.4
+                new_drive_message.drive.speed = 0.5
                 
-                self.pub_drive.publish(new_drive_message)
+                new_drive_message_target = AckermannDriveStamped()
+                new_drive_message_target.drive.acceleration = tar_acc
+                new_drive_message_target.drive.steering_angle = tar_steering_angle
+                new_drive_message_target.drive.speed = 0.5
+                
+                self.pub_drive_ego.publish(new_drive_message_target)
+                self.pub_drive_tar.publish(new_drive_message_target)
 
                 
     # def opp_listener_callback(self, msg):
