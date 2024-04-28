@@ -254,7 +254,7 @@ class GPOdometryPredictor(Node):
                 new_drive_message = AckermannDriveStamped()
                 new_drive_message.drive.acceleration = ego_acc
                 new_drive_message.drive.steering_angle = ego_steering_angle
-                new_drive_message.drive.speed = 1.0
+                new_drive_message.drive.speed = 0.4
                 
                 self.pub_drive.publish(new_drive_message)
 
