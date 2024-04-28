@@ -205,6 +205,8 @@ class GPOdometryPredictor(Node):
         y = msg.pose.pose.position.y
         z = msg.pose.pose.position.z
         
+        # use the inputs coming from self.tar_odom_x,y and z for target vehicle pose
+        
         gp_tarpred_list = [None] * n_iter
         
         ego_prediction, tar_prediction, tv_pred = None, None, None
@@ -213,9 +215,12 @@ class GPOdometryPredictor(Node):
                 break
             else:
                 if self.predictor:
+                    # ego_pred is what the mpcc controller predicts
                     ego_pred = self.gp_mpcc_ego_controller.get_prediction()
                     if ego_pred.s is not None:
-                        print("Ego pred.s", ego_pred.s)
+                        # based on the output from the mpcc controller, provide the current
+                        # states of the ego and target vehicle to the GP Predictor and get a 
+                        # prediction for the TV, that we use to maneuver
                         tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
                         gp_tarpred_list.append(tv_pred.copy())
                     else:
@@ -232,6 +237,8 @@ class GPOdometryPredictor(Node):
                 if not info["success"]:
                     print(f"EGO infeasible")
                     pass
+                
+                # TODO - figure out what to do for speed
                 
                 new_drive_message = AckermannDriveStamped()
                 new_drive_message.drive.acceleration = ego_acc
