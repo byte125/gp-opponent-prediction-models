@@ -49,11 +49,11 @@ class GPOdometryPredictor(Node):
         self.pub_drive_ego = self.create_publisher(AckermannDriveStamped, '/drive', 10)
         self.pub_drive_tar = self.create_publisher(AckermannDriveStamped, '/opp_drive', 10)
         
-        # self.subscription_opp = self.create_subscription(
-        #     Odometry,
-        #     '/ego_racecar/opp_odom',
-        #     self.opp_listener_callback,
-        #     10)
+        self.subscription_opp = self.create_subscription(
+            Odometry,
+            '/ego_racecar/opp_odom',
+            self.opp_listener_callback,
+            10)
 
         # # Parameters for the model
         # inducing_points_num = 200
@@ -247,61 +247,12 @@ class GPOdometryPredictor(Node):
                 self.pub_drive_tar.publish(new_drive_message_target)
 
                 
-    # def opp_listener_callback(self, msg):
-    #     # Extract position data from Odometry message
-    #     print("Inside opp listener callback")
-    #     x = msg.pose.pose.position.x
-    #     y = msg.pose.pose.position.y
-    #     z = msg.pose.pose.position.z
-        
-    #     # Perform prediction
-        
-    #     gp_tarpred_list = [None] * n_iter
-    #     egopred_list = [None] * n_iter
-    #     tarpred_list = [None] * n_iter
-        
-    #     ego_prediction, tar_prediction, tv_pred = None, None, None
-    #     while self.t < self.T:
-    #         if self.tar_sim_state.p.s >= 1.9 * self.scenario.length or self.ego_sim_state.p.s >= 1.9 * self.scenario.length:
-    #             break
-    #         else:
-    #             if self.predictor:
-    #                 ego_pred = self.gp_mpcc_ego_controller.get_prediction()
-    #                 if ego_pred.s is not None:
-    #                     tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
-    #                     gp_tarpred_list.append(tv_pred.copy())
-    #                 else:
-    #                     gp_tarpred_list.append(None)
-
-    #             # Target agent
-    #             info, b, exitflag = self.mpcc_tv_controller.step(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
-    #             if not info["success"]:
-    #                 print(f"TV infeasible - Exitflag: {exitflag}")
-    #                 pass
-
-    #             # Ego agent
-    #             info, b, exitflag = self.gp_mpcc_ego_controller.step(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
-    #             if not info["success"]:
-    #                 print(f"EGO infeasible - Exitflag: {exitflag}")
-    #                 pass
-    #                 # return
-
-    #             # step forward
-    #             tar_prediction = self.mpcc_tv_controller.get_prediction().copy()
-    #             tar_prediction.t = self.tar_sim_state.t
-    #             self.tar_dynamics_simulator.step(self.tar_sim_state)
-    #             self.track_obj.update_curvature(self.tar_sim_state)
-
-    #             ego_prediction = self.gp_mpcc_ego_controller.get_prediction().copy()
-    #             ego_prediction.t = self.ego_sim_state.t
-    #             self.ego_dynamics_simulator.step(self.ego_sim_state)
-
-    #             # log states
-    #             self.egost_list.append(self.ego_sim_state.copy())
-    #             self.tarst_list.append(self.tar_sim_state.copy())
-    #             egopred_list.append(ego_prediction)
-    #             tarpred_list.append(tar_prediction)
-    #             print(f"Current time: {round(self.ego_sim_state.t, 2)}")
+    def opp_listener_callback(self, msg):
+        # Extract position data from Odometry message
+        print("Inside opp listener callback")
+        self.tar_odom_x = msg.pose.pose.position.x
+        self.tar_odom_y = msg.pose.pose.position.y
+        self.tar_odom_z = msg.pose.pose.position.z
 
 def main(args=None):
     rclpy.init(args=args)
