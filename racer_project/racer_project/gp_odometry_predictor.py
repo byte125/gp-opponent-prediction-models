@@ -14,6 +14,7 @@ from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVeloci
 from barcgp.controllers.MPCC_H2H_approx import MPCC_H2H_approx
 from barcgp.simulation.dynamics_simulator import DynamicsSimulator
 from barcgp.h2h_configs import *
+from barcgp.common.utils.scenario_utils import *
 from barcgp.common.utils.file_utils import *
 from barcgp.common_control import run_pid_warmstart
 
@@ -72,18 +73,12 @@ class GPOdometryPredictor(Node):
         # likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=num_tasks)
 
         # s, x_tran, e_psi, v_long need to be set to the start values, for both EV and TV
-        s = 0.0
-        x_tran = 0.0
-        e_psi = 0.0
-        v_long = 0.0
+        s, x_tran, e_psi, v_long = self.random_init(self.egoMin, self.egoMax)
         self.ego_init_state = VehicleState(t=0.0,
                                       p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
                                       v=BodyLinearVelocity(v_long=v_long))
         
-        s = 1.0
-        x_tran = 0.0
-        e_psi = 0.0
-        v_long = 0.0
+        s, x_tran, e_psi, v_long = self.random_init(self.egoMin, self.egoMax)
         self.tar_init_state = VehicleState(t=0.0,
                                       p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
                                       v=BodyLinearVelocity(v_long=v_long))
@@ -92,14 +87,6 @@ class GPOdometryPredictor(Node):
         # This generates a scenario with a straight track, which can be passed as track_obj
         # I dont know what phase_out, ego_obs_avoid_d, tar_obs_avoid_d are, so I set them to default values
         self.straight_track = StraightTrack(length=10, width=100.0, slack=0.8, phase_out=True)
-        # track_obj = ScenarioDefinition(
-        #     track_type='straight',
-        #     track=straight_track,
-        #     ego_init_state=ego_init_state,
-        #     tar_init_state=tar_init_state,
-        #     ego_obs_avoid_d=0.1,
-        #     tar_obs_avoid_d=0.1
-        # )
         
         self.scen_params = ScenarioGenParams(types=['track'], egoMin=self.egoMin, egoMax=self.egoMax, tarMin=self.tarMin, tarMax=self.tarMax, width=100.0)
         self.scen_gen = ScenarioGenerator(self.scen_params)
@@ -199,23 +186,25 @@ class GPOdometryPredictor(Node):
         # Initial prediction is expected to return None, step the simulation and move on
         self.ego_pred = self.gp_mpcc_ego_controller.get_prediction()
 
-        
+    def random_init(self, stateMin, stateMax):
+        s = np.random.uniform(stateMin.p.s, stateMax.p.s)
+        x_tran = np.random.uniform(stateMin.p.x_tran, stateMax.p.x_tran)
+        e_psi = np.random.uniform(stateMin.p.e_psi, stateMax.p.e_psi)
+        v_long = np.random.uniform(stateMin.v.v_long, stateMax.v.v_long)
+        # print(s, x_tran, e_psi, v_long)
+        return s, x_tran, e_psi, v_long
+    
     # Function to initialize arrays with a single zero
     def zero_array(self):
         return array.array('f', [0.0])
 
     def ego_listener_callback(self, msg):
-        print("Inside ego listener callback")
-        # Extract position data from Odometry message
+        # Listen to ego racecar's odometry message 
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         z = msg.pose.pose.position.z
         
-        # Perform prediction
-        
         gp_tarpred_list = [None] * n_iter
-        egopred_list = [None] * n_iter
-        tarpred_list = [None] * n_iter
         
         ego_prediction, tar_prediction, tv_pred = None, None, None
         while self.t < self.T:
@@ -236,10 +225,6 @@ class GPOdometryPredictor(Node):
                 if not info["success"]:
                     print(f"TV infeasible")
                     pass
-                
-                print("Target acceleration ", tar_acc)
-                print("Target position ", tar_pos)
-                print("Target steering ", tar_steering_angle)
 
                 # Ego agent
                 info, ego_acc, ego_pos, ego_steering_angle = self.gp_mpcc_ego_controller.step_racer(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
@@ -247,14 +232,10 @@ class GPOdometryPredictor(Node):
                     print(f"EGO infeasible")
                     pass
                 
-                print("Target acceleration ", ego_acc)
-                print("Target position ", ego_pos)
-                print("Target steering ", ego_steering_angle)
-                
                 new_drive_message = AckermannDriveStamped()
                 new_drive_message.drive.acceleration = ego_acc
                 new_drive_message.drive.steering_angle = ego_steering_angle
-                new_drive_message.drive.speed = 0.4
+                # new_drive_message.drive.speed = 0.4
                 
                 self.pub_drive.publish(new_drive_message)
 
