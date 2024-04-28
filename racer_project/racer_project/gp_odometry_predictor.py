@@ -17,6 +17,8 @@ from barcgp.h2h_configs import *
 from barcgp.common.utils.file_utils import *
 from barcgp.common_control import run_pid_warmstart
 
+from ackermann_msgs.msg import AckermannDriveStamped, AckermannDrive
+
 class GPOdometryPredictor(Node):
     def __init__(self):
         super().__init__('gp_odometry_predictor')
@@ -42,6 +44,8 @@ class GPOdometryPredictor(Node):
             '/ego_racecar/odom',
             self.ego_listener_callback,
             10)
+        
+        self.pub_drive = self.create_publisher(AckermannDriveStamped, '/drive', 10)
 
         # self.subscription_opp = self.create_subscription(
         #     Odometry,
@@ -221,40 +225,39 @@ class GPOdometryPredictor(Node):
                 if self.predictor:
                     ego_pred = self.gp_mpcc_ego_controller.get_prediction()
                     if ego_pred.s is not None:
+                        print("Ego pred.s", ego_pred.s)
                         tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
                         gp_tarpred_list.append(tv_pred.copy())
                     else:
                         gp_tarpred_list.append(None)
 
                 # Target agent
-                info, b, exitflag = self.mpcc_tv_controller.step(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
+                info, tar_acc, tar_pos, tar_steering_angle = self.mpcc_tv_controller.step_racer(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
                 if not info["success"]:
-                    print(f"TV infeasible - Exitflag: {exitflag}")
+                    print(f"TV infeasible")
                     pass
+                
+                print("Target acceleration ", tar_acc)
+                print("Target position ", tar_pos)
+                print("Target steering ", tar_steering_angle)
 
                 # Ego agent
-                info, b, exitflag = self.gp_mpcc_ego_controller.step(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
+                info, ego_acc, ego_pos, ego_steering_angle = self.gp_mpcc_ego_controller.step_racer(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
                 if not info["success"]:
-                    print(f"EGO infeasible - Exitflag: {exitflag}")
+                    print(f"EGO infeasible")
                     pass
-                    # return
+                
+                print("Target acceleration ", ego_acc)
+                print("Target position ", ego_pos)
+                print("Target steering ", ego_steering_angle)
+                
+                new_drive_message = AckermannDriveStamped()
+                new_drive_message.drive.acceleration = ego_acc
+                new_drive_message.drive.steering_angle = ego_steering_angle
+                new_drive_message.drive.speed = 1.0
+                
+                self.pub_drive.publish(new_drive_message)
 
-                # step forward
-                tar_prediction = self.mpcc_tv_controller.get_prediction().copy()
-                tar_prediction.t = self.tar_sim_state.t
-                self.tar_dynamics_simulator.step(self.tar_sim_state)
-                self.track_obj.update_curvature(self.tar_sim_state)
-
-                ego_prediction = self.gp_mpcc_ego_controller.get_prediction().copy()
-                ego_prediction.t = self.ego_sim_state.t
-                self.ego_dynamics_simulator.step(self.ego_sim_state)
-
-                # log states
-                self.egost_list.append(self.ego_sim_state.copy())
-                self.tarst_list.append(self.tar_sim_state.copy())
-                egopred_list.append(ego_prediction)
-                tarpred_list.append(tar_prediction)
-                print(f"Current time: {round(self.ego_sim_state.t, 2)}")
                 
     # def opp_listener_callback(self, msg):
     #     # Extract position data from Odometry message
