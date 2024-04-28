@@ -566,7 +566,7 @@ class GPController(ABC):
 
     def sample_traj_gp_par(self, ego_state: VehicleState, target_state: VehicleState,
                            ego_prediction: VehiclePrediction, track: RadiusArclengthTrack, M):
-
+        print("sample_traj")
         target_prediction = VehiclePrediction()
         target_prediction.s = []
         target_prediction.x_tran = []

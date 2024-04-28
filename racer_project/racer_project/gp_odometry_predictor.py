@@ -10,7 +10,7 @@ from barcgp.prediction.gpytorch_models import IndependentMultitaskGPModelApproxi
 from barcgp.prediction.trajectory_predictor import GPPredictor  # Ensure this is defined somewhere in your project
 from barcgp.common.utils.scenario_utils import ScenarioDefinition, ScenarioGenerator, ScenarioGenParams
 from barcgp.common.tracks.track_lib import StraightTrack
-from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVelocity, VehiclePrediction
+from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVelocity, VehiclePrediction,ParametricVelocity
 from barcgp.controllers.MPCC_H2H_approx import MPCC_H2H_approx
 from barcgp.simulation.dynamics_simulator import DynamicsSimulator
 from barcgp.h2h_configs import *
@@ -199,18 +199,38 @@ class GPOdometryPredictor(Node):
     def zero_array(self):
         return array.array('f', [0.0])
 
-    def ego_listener_callback(self, msg):
-        # Listen to ego racecar's odometry message 
+    def odom_to_vehicle_state(self,msg):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
-        z = msg.pose.pose.position.z
+        psi = msg.pose.pose.orientation.w
         
+        vx = msg.twist.twist.linear.x
+        vy = msg.twist.twist.linear.y
+        w = msg.twist.twist.angular.z
+      
+        
+        state = VehicleState(t=0.0, 
+                             x=Position(x,y,0),
+                             v=BodyLinearVelocity(vx,vy,0),
+                             w=BodyAngularVelocity(0,0,w),
+                             e=OrientationEuler(0,0,psi),
+                             p=ParametricPose(s=x,x_tran=y,n=0,e_psi=psi),
+                             pt=ParametricVelocity(ds=vx*np.cos(psi),dx_tran=vx*np.sin(psi),dn=0,de_psi=w)
+                             )
+        
+        
+        return state
+    def ego_listener_callback(self, msg):
+        # Listen to ego racecar's odometry message 
+        self.ego_sim_state = self.odom_to_vehicle_state(msg)
+        print("ego car state {}",self.ego_sim_state)
         # use the inputs coming from self.tar_odom_x,y and z for target vehicle pose
         
         gp_tarpred_list = [None] * n_iter
         
         ego_prediction, tar_prediction, tv_pred = None, None, None
         while self.t < self.T:
+            self.t += 1
             if self.tar_sim_state.p.s >= 1.9 * self.scenario.length or self.ego_sim_state.p.s >= 1.9 * self.scenario.length:
                 break
             else:
@@ -227,39 +247,41 @@ class GPOdometryPredictor(Node):
                         gp_tarpred_list.append(None)
 
                 # Target agent
-                info, tar_acc, tar_pos, tar_steering_angle = self.mpcc_tv_controller.step_racer(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
-                if not info["success"]:
-                    print(f"TV infeasible")
-                    pass
+                # info, tar_acc, tar_pos, tar_steering_angle = self.mpcc_tv_controller.step_racer(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
+                # if not info["success"]:
+                #     print(f"TV infeasible")
+                #     pass
 
-                # Ego agent
-                info, ego_acc, ego_pos, ego_steering_angle = self.gp_mpcc_ego_controller.step_racer(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
-                if not info["success"]:
-                    print(f"EGO infeasible")
-                    pass
+                # # Ego agent
+                # info, ego_acc, ego_pos, ego_steering_angle = self.gp_mpcc_ego_controller.step_racer(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
+                # if not info["success"]:
+                #     print(f"EGO infeasible")
+                #     pass
                 
                 # TODO - figure out what to do for speed
                 
                 new_drive_message = AckermannDriveStamped()
-                new_drive_message.drive.acceleration = ego_acc
-                new_drive_message.drive.steering_angle = ego_steering_angle
+                new_drive_message.drive.acceleration = 0.2
+                new_drive_message.drive.steering_angle = 0.2
                 new_drive_message.drive.speed = 0.5
                 
                 new_drive_message_target = AckermannDriveStamped()
-                new_drive_message_target.drive.acceleration = tar_acc
-                new_drive_message_target.drive.steering_angle = tar_steering_angle
+                new_drive_message_target.drive.acceleration = 0.2
+                new_drive_message_target.drive.steering_angle = 0.2
                 new_drive_message_target.drive.speed = 0.5
                 
                 self.pub_drive_ego.publish(new_drive_message_target)
                 self.pub_drive_tar.publish(new_drive_message_target)
 
+
                 
     def opp_listener_callback(self, msg):
         # Extract position data from Odometry message
         print("Inside opp listener callback")
-        self.tar_odom_x = msg.pose.pose.position.x
-        self.tar_odom_y = msg.pose.pose.position.y
-        self.tar_odom_z = msg.pose.pose.position.z
+        
+        self.tar_sim_state = self.odom_to_vehicle_state(msg)
+        print("tar car state {}",self.tar_sim_state)
+
 
 def main(args=None):
     rclpy.init(args=args)
