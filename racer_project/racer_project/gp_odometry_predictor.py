@@ -29,16 +29,16 @@ class GPOdometryPredictor(Node):
         # local once we have everything working
         
         self.tarMin = VehicleState(t=0.0,
-                            p=ParametricPose(s=offset + 0.9, x_tran=-.3 * width, e_psi=-0.02),
+                            p=ParametricPose(s=0.0, x_tran=-2.0, e_psi=-0.5),
                             v=BodyLinearVelocity(v_long=0.5*factor))
         self.tarMax = VehicleState(t=0.0,
-                            p=ParametricPose(s=offset + 1.2, x_tran=.3* width, e_psi=0.02),
+                            p=ParametricPose(s=5.0, x_tran=2.0, e_psi=0.5),
                             v=BodyLinearVelocity(v_long=1.0*factor))
         self.egoMin = VehicleState(t=0.0,
-                            p=ParametricPose(s=offset + 0.2, x_tran=-.3 * width, e_psi=-0.02),
+                            p=ParametricPose(s=offset + 0.2, x_tran=-2.0, e_psi=-0.5),
                             v=BodyLinearVelocity(v_long=0.5*factor))
         self.egoMax = VehicleState(t=0.0,
-                            p=ParametricPose(s=offset + 0.4, x_tran=.3 * width, e_psi=0.02),
+                            p=ParametricPose(s=offset + 0.4, x_tran=2.0, e_psi=0.5),
                             v=BodyLinearVelocity(v_long=1.0*factor))
         
         self.subscription_ego = self.create_subscription(
@@ -61,7 +61,7 @@ class GPOdometryPredictor(Node):
         # input_dim = 3  # Assuming you're using 3D position data (x, y, z)
         # num_tasks = 5  # Number of tasks/output dimensions
         ##############################################################################################################################################
-        use_GPU = False   
+        use_GPU = True   
         self.policy_name = "aggressive_blocking"
         self.M = 50  # Number of samples for GP
         self.T = 20  # Max number of seconds to run experiment
@@ -75,12 +75,28 @@ class GPOdometryPredictor(Node):
         # likelihood = gpytorch.likelihoods.MultitaskGaussianLikelihood(num_tasks=num_tasks)
 
         # s, x_tran, e_psi, v_long need to be set to the start values, for both EV and TV
-        s, x_tran, e_psi, v_long = self.random_init(self.egoMin, self.egoMax)
+        # s, x_tran, e_psi, v_long = self.random_init(self.egoMin, self.egoMax)
+        # self.ego_init_state = VehicleState(t=0.0,
+        #                               p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
+        #                               v=BodyLinearVelocity(v_long=v_long))
+        
+        # s, x_tran, e_psi, v_long = self.random_init(self.egoMin, self.egoMax)
+        # self.tar_init_state = VehicleState(t=0.0,
+        #                               p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
+        #                               v=BodyLinearVelocity(v_long=v_long))
+
+        s = 0.0
+        x_tran = 0.0
+        e_psi = 0.0
+        v_long = 0.0
         self.ego_init_state = VehicleState(t=0.0,
                                       p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
                                       v=BodyLinearVelocity(v_long=v_long))
         
-        s, x_tran, e_psi, v_long = self.random_init(self.egoMin, self.egoMax)
+        s = 1.0
+        x_tran = 0.0
+        e_psi = 0.0
+        v_long = 0.0
         self.tar_init_state = VehicleState(t=0.0,
                                       p=ParametricPose(s=s, x_tran=x_tran, e_psi=e_psi),
                                       v=BodyLinearVelocity(v_long=v_long))
@@ -90,7 +106,7 @@ class GPOdometryPredictor(Node):
         # I dont know what phase_out, ego_obs_avoid_d, tar_obs_avoid_d are, so I set them to default values
         self.straight_track = StraightTrack(length=10, width=100.0, slack=0.8, phase_out=True)
         
-        self.scen_params = ScenarioGenParams(types=['track'], egoMin=self.egoMin, egoMax=self.egoMax, tarMin=self.tarMin, tarMax=self.tarMax, width=100.0)
+        self.scen_params = ScenarioGenParams(types=['straight'], egoMin=self.egoMin, egoMax=self.egoMax, tarMin=self.tarMin, tarMax=self.tarMax, width=100.0)
         self.scen_gen = ScenarioGenerator(self.scen_params)
         self.scenario = self.scen_gen.genScenario()
         
@@ -178,6 +194,7 @@ class GPOdometryPredictor(Node):
         self.gp_mpcc_ego_controller.initialize()
 
         self.gp_mpcc_ego_controller.set_warm_start(*self.ego_history)
+        print(self.gp_mpcc_ego_controller.get_prediction())
 
         self.mpcc_tv_params.vectorize_constraints()
         self.mpcc_tv_controller = MPCC_H2H_approx(self.tar_dynamics_simulator.model, self.track_obj, self.mpcc_tv_params, name="mpcc_h2h_tv", track_name=self.track_name)
@@ -216,7 +233,7 @@ class GPOdometryPredictor(Node):
                              e=OrientationEuler(0,0,psi),
                              # TODO - Figure out what n should be 
                              p=ParametricPose(s=x,x_tran=y,n=0,e_psi=psi),
-                             # TODO - Fugure out what dn must be
+                             # TODO - Figure out what dn must be
                              pt=ParametricVelocity(ds=vx*np.cos(psi),dx_tran=vx*np.sin(psi),dn=0,de_psi=w)
                              )
         
@@ -225,7 +242,7 @@ class GPOdometryPredictor(Node):
     def ego_listener_callback(self, msg):
         # Listen to ego racecar's odometry message 
         self.ego_sim_state = self.odom_to_vehicle_state(msg)
-        print("ego car state {}",self.ego_sim_state)
+        # print("ego car state {}",self.ego_sim_state)
         # use the inputs coming from self.tar_odom_x,y and z for target vehicle pose
         
         gp_tarpred_list = [None] * n_iter
@@ -239,11 +256,13 @@ class GPOdometryPredictor(Node):
                 if self.predictor:
                     # ego_pred is what the mpcc controller predicts
                     ego_pred = self.gp_mpcc_ego_controller.get_prediction()
+                    # print(ego_pred)
                     if ego_pred.s is not None:
                         # based on the output from the mpcc controller, provide the current
                         # states of the ego and target vehicle to the GP Predictor and get a 
                         # prediction for the TV, that we use to maneuver
                         tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
+                        print(tv_pred)
                         # gp_tarpred_list.append(tv_pred.copy())
                     # else:
                     #     gp_tarpred_list.append(None)
@@ -255,10 +274,10 @@ class GPOdometryPredictor(Node):
                 #     pass
 
                 # Ego agent
-                info, ego_acc, ego_pos, ego_steering_angle = self.gp_mpcc_ego_controller.step_racer(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
-                if not info["success"]:
-                    print(f"EGO infeasible")
-                    pass
+                # info, ego_acc, ego_pos, ego_steering_angle = self.gp_mpcc_ego_controller.step_racer(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
+                # if not info["success"]:
+                    # print(f"EGO infeasible")
+                    # pass
                 
                 # TODO - figure out what to do for speed
                 
@@ -266,15 +285,15 @@ class GPOdometryPredictor(Node):
                 
                 new_drive_message = AckermannDriveStamped()
                 # new_drive_message.drive.acceleration = 0
-                new_drive_message.drive.steering_angle = ego_steering_angle         
-                new_drive_message.drive.speed = msg.twist.twist.linear.x + (ego_acc / 30.0)
+                # new_drive_message.drive.steering_angle = ego_steering_angle         
+                # new_drive_message.drive.speed = msg.twist.twist.linear.x + (ego_acc / 30.0)
                 
                 # new_drive_message_target = AckermannDriveStamped()
                 # new_drive_message_target.drive.acceleration = tar_acc
                 # new_drive_message_target.drive.steering_angle = tar_steering_angle
                 # new_drive_message_target.drive.speed = 0.15
                 
-                print(new_drive_message)
+                # print(new_drive_message)
                 
                 self.pub_drive_ego.publish(new_drive_message)
             
