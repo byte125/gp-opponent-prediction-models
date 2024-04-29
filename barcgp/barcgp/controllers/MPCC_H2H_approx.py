@@ -264,6 +264,94 @@ class MPCC_H2H_approx(AbstractController):
             logger(f"X current: {tv_state.x.x}")
             logger(f"X obs: {x_vals[0]}")
         return info, blocking, exitflag
+    
+    def step_racer(self, ego_state: VehicleState, tv_state: VehicleState, tv_pred: VehiclePrediction = None,
+             policy: str = None, logger=None, num_lap=0):
+
+        # evaluate policy for behavior
+        policy = self.policy_map.get(policy)
+        ego_state.p.s += self.track_length * num_lap
+        tv_state.p.s += self.track_length * num_lap
+        if abs((tv_state.p.s + self.track_length) - ego_state.p.s) < abs(tv_state.p.s - ego_state.p.s):
+            tv_state.p.s += self.track_length
+        elif abs((tv_state.p.s - self.track_length) - ego_state.p.s) < abs(tv_state.p.s - ego_state.p.s):
+            tv_state.p.s -= self.track_length
+        x_ref_blocking, blocking = policy(ego_state, tv_state)
+        x_ref = np.tile(x_ref_blocking, (self.N,))
+        xref_scale = max(ego_state.p.s - tv_state.p.s, 0) if tv_state is not None else 0
+
+        # Initialize Obstacle List
+        obstacle = list()
+        # if tv_state is not None and tv_state.t and tv_pred is not None:
+        #     # In case where we don't get TV prediction, just tile the first state for full horizon
+        #     obstacle = [RectangleObstacle(xc=tv_state.x.x, yc=tv_state.x.y, psi=tv_state.e.psi, s=tv_state.p.s,
+        #                                   x_tran=tv_state.p.x_tran,
+        #                                   h=self.lencar, w=self.widthcar) for i in range(self.N + 1)]
+        # else:
+        for _ in range(self.N + 1):
+            obstacle.append(RectangleObstacle())
+        # if tv_state is not None and tv_state.t:
+        #     obstacle[0] = RectangleObstacle(xc=tv_state.x.x, yc=tv_state.x.y, psi=tv_state.e.psi, s=tv_state.p.s,
+        #                                   x_tran=tv_state.p.x_tran,
+        #                                   h=self.lencar, w=self.widthcar)
+
+        # find out if prediction is parametric, global or both
+
+        # if not blocking, we need to use all predictions! Otherwise, only interested in the current one to avoid
+        # crashing
+        # if not blocking and tv_pred is not None and tv_pred.t and tv_state.p.s - ego_state.p.s < 4 *self.lencar:
+        if tv_pred is not None and tv_pred.t and tv_state is not None and tv_state.t:
+            # contains_parametric = tv_pred.s and np.any(tv_pred.s)
+            # contains_global = tv_pred.x and np.any(tv_pred.x)
+            contains_parametric = np.any(tv_pred.s)
+            contains_global = np.any(tv_pred.x)
+            offs = 0
+            t_ = tv_pred.t
+            while t_ < tv_state.t - 0.5*self.dt:
+                offs += 1
+                t_ += self.dt
+
+            if contains_parametric and contains_global:
+                for i, (s, x_tran, x, y, psi) in enumerate(
+                        zip(tv_pred.s[offs:self.N], tv_pred.x_tran[offs:self.N], tv_pred.x[offs:self.N],
+                            tv_pred.y[offs:self.N], tv_pred.psi[offs:self.N])):
+                    if i > self.N:
+                        break
+                    xy_std = tv_pred.xy_cov[offs:][i] if tv_pred.xy_cov is not None else np.zeros((2, 2))
+                    obstacle[i] = RectangleObstacle(xc=x, yc=y, psi=psi, s=s, x_tran=x_tran,
+                                                        h=self.lencar, w=self.widthcar,
+                                                        std_local_x=self.num_std_deviations * np.sqrt(xy_std[0, 0]),
+                                                        std_local_y=self.num_std_deviations * np.sqrt(xy_std[1, 1]))
+            elif contains_parametric:
+                for i, (s, x_tran, e_psi) in enumerate(zip(tv_pred.s[offs:self.N], tv_pred.x_tran[offs:self.N],
+                                                           tv_pred.e_psi[offs:self.N])):
+                    if i > self.N:
+                        break
+                    xy_std = tv_pred.xy_cov[offs:][i] if tv_pred.xy_cov is not None else np.zeros((2, 2))
+                    global_coord = self.track.local_to_global((s, x_tran, e_psi))
+                    obstacle[i] = RectangleObstacle(xc=global_coord[0], yc=global_coord[1], psi=global_coord[2],
+                                                        s=s, x_tran=x_tran,
+                                                        h=self.lencar, w=self.widthcar,
+                                                        std_local_x=self.num_std_deviations * np.sqrt(xy_std[0, 0]),
+                                                        std_local_y=self.num_std_deviations * np.sqrt(xy_std[1, 1]))
+            elif contains_global:
+                # TODO Add local state
+                for i, (x, y, psi) in enumerate(
+                        zip(tv_pred.x[offs:self.N], tv_pred.y[offs:self.N], tv_pred.psi[offs:self.N])):
+                    if i > self.N:
+                        break
+                    xy_std = tv_pred.xy_cov[offs:][i] if tv_pred.xy_cov is not None else np.zeros((2, 2))
+                    obstacle[i] = RectangleObstacle(xc=x, yc=y, psi=psi, h=self.lencar, w=self.widthcar,
+                                                        std_local_x=self.num_std_deviations * np.sqrt(xy_std[0, 0]),
+                                                        std_local_y=self.num_std_deviations * np.sqrt(xy_std[1, 1]))
+
+        control, info, exitflag = self.solve(ego_state, ego_state.p.s, x_ref, xref_scale, obstacle, blocking)
+
+        ego_state.u.u_a = control.u_a
+        ego_state.p.s -= self.track_length*num_lap
+        ego_state.u.u_steer = control.u_steer
+        
+        return info, ego_state.u.u_a, ego_state.p.s, ego_state.u.u_steer
 
     def solve(self, state: VehicleState, s0, x_ref: np.array, xref_scale, obstacle: List[RectangleObstacle], blocking):
         if not self.initialized:
