@@ -270,14 +270,13 @@ class GPOdometryPredictor(Node):
             #         # else:
             #         #     gp_tarpred_list.append(None)
         ego_pred = VehiclePrediction()
-        ego_pred.x = [7.0, 7.0, 7.0, 7.0, 7.0]
-        self.tar_sim_state.v.v_long = 0.5 
+        ego_pred.x = [6.0, 0.0, 3.0, 1.0, 2.0]
+        # print (self.tar_sim_state)
+        # print (self.ego_sim_state)
         tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
         # print(tv_pred.print())
         pred_path_msg = Path()
         pred_path_msg.header.frame_id = 'map'
-        # tv_pred.print()
-        # print (self.tar_sim_state)
         for i in range(len(ego_pred.x)):
             pose = PoseStamped()
             pose.pose.position.x = tv_pred.s[i]
@@ -328,11 +327,12 @@ class GPOdometryPredictor(Node):
         new_drive_message_target = AckermannDriveStamped()
         new_drive_message_ego = AckermannDriveStamped()
         # new_drive_message_target.drive.acceleration = 0
-        new_drive_message_target.drive.steering_angle = 0.1
-        new_drive_message_target.drive.speed = 1.0
-        new_drive_message_ego.drive.speed = 0.0
-        self.pub_drive_tar.publish(new_drive_message_target)
-        self.pub_drive_ego.publish(new_drive_message_ego)
+        # new_drive_message_target.drive.steering_angle = 0.1
+        # new_drive_message_ego.drive.steering_angle = 0.05
+        # new_drive_message_target.drive.speed = 1.0
+        # new_drive_message_ego.drive.speed = 0.5
+        # self.pub_drive_tar.publish(new_drive_message_target)
+        # self.pub_drive_ego.publish(new_drive_message_ego) 
 
         # print("tar car state {}",self.tar_sim_state)
 
