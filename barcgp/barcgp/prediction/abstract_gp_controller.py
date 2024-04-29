@@ -595,10 +595,10 @@ class GPController(ABC):
         for i in range(horizon - 1):
             next_pred, _ = self.sample_gp_par_vec(lookahead_egos, evolving_states)
             # get future ego state
-            lookahead_egos[0] = ego_prediction.s[i + 1]
-            lookahead_egos[1] = ego_prediction.x_tran[i + 1]
-            lookahead_egos[2] = ego_prediction.e_psi[i + 1]
-            lookahead_egos[3] = ego_prediction.v_long[i + 1]
+            #lookahead_egos[0] = ego_prediction.s[i + 1]
+            #lookahead_egos[1] = ego_prediction.x_tran[i + 1]
+            #lookahead_egos[2] = ego_prediction.e_psi[i + 1]
+            #lookahead_egos[3] = ego_prediction.v_long[i + 1]
             for j in range(M):
                 # prepare next inputs
                 evolving_states[j][0] += next_pred[j][0].item()

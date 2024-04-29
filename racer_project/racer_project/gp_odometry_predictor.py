@@ -261,11 +261,15 @@ class GPOdometryPredictor(Node):
                         # based on the output from the mpcc controller, provide the current
                         # states of the ego and target vehicle to the GP Predictor and get a 
                         # prediction for the TV, that we use to maneuver
-                        tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
                         print(tv_pred)
                         # gp_tarpred_list.append(tv_pred.copy())
                     # else:
                     #     gp_tarpred_list.append(None)
+            ego_pred = VehiclePrediction()
+            ego_pred.x = [7.0, 7.0, 7.0, 7.0, 7.0]
+            tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
+            # print(tv_pred.print())
+            tv_pred.print()
 
                 # Target agent
                 # info, tar_acc, tar_pos, tar_steering_angle = self.mpcc_tv_controller.step_racer(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
@@ -283,7 +287,7 @@ class GPOdometryPredictor(Node):
                 
                 # print("HEREEEE")
                 
-                new_drive_message = AckermannDriveStamped()
+                # new_drive_message = AckermannDriveStamped()
                 # new_drive_message.drive.acceleration = 0
                 # new_drive_message.drive.steering_angle = ego_steering_angle         
                 # new_drive_message.drive.speed = msg.twist.twist.linear.x + (ego_acc / 30.0)
@@ -295,7 +299,7 @@ class GPOdometryPredictor(Node):
                 
                 # print(new_drive_message)
                 
-                self.pub_drive_ego.publish(new_drive_message)
+                # self.pub_drive_ego.publish(new_drive_message)
             
                 # self.pub_drive_tar.publish(new_drive_message_target)
 
