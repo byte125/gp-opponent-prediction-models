@@ -202,6 +202,9 @@ class GPOdometryPredictor(Node):
     def odom_to_vehicle_state(self,msg):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
+        # TODO -@yash and @jai
+        # heading angle needs to be corrected - -extract from 
+        # the quaternion and convert to yaw
         psi = msg.pose.pose.orientation.w
         
         vx = msg.twist.twist.linear.x
@@ -214,7 +217,9 @@ class GPOdometryPredictor(Node):
                              v=BodyLinearVelocity(vx,vy,0),
                              w=BodyAngularVelocity(0,0,w),
                              e=OrientationEuler(0,0,psi),
+                             # TODO - Figure out what n should be 
                              p=ParametricPose(s=x,x_tran=y,n=0,e_psi=psi),
+                             # TODO - Fugure out what dn must be
                              pt=ParametricVelocity(ds=vx*np.cos(psi),dx_tran=vx*np.sin(psi),dn=0,de_psi=w)
                              )
         
