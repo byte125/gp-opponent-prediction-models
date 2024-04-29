@@ -202,15 +202,16 @@ class GPOdometryPredictor(Node):
     def odom_to_vehicle_state(self,msg):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
-        # TODO -@yash and @jai
+        # TODO -@yash and @jai -- done :)
         # heading angle needs to be corrected - -extract from 
         # the quaternion and convert to yaw
-        psi = msg.pose.pose.orientation.w
+        psi = np.atan2(2 * msg.pose.pose.orientation.w * msg.pose.pose.orientation.z, 1 - 2 * (msg.pose.pose.orientation.z ** 2))
+        psi = (psi + 2 * np.pi) % (2 * np.pi)
+        # psi = msg.pose.pose.orientation.w
         
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         w = msg.twist.twist.angular.z
-      
         
         state = VehicleState(t=0.0, 
                              x=Position(x,y,0),
