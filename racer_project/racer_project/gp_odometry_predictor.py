@@ -20,6 +20,8 @@ from barcgp.common.utils.file_utils import *
 from barcgp.common_control import run_pid_warmstart
 
 from ackermann_msgs.msg import AckermannDriveStamped, AckermannDrive
+from nav_msgs.msg import Path, Odometry
+from geometry_msgs.msg import PoseStamped
 
 class GPOdometryPredictor(Node):
     def __init__(self):
@@ -41,6 +43,12 @@ class GPOdometryPredictor(Node):
                             p=ParametricPose(s=offset + 0.4, x_tran=2.0, e_psi=0.5),
                             v=BodyLinearVelocity(v_long=1.0*factor))
         
+        self.subscription_opp = self.create_subscription(
+            Odometry,
+            '/opp_racecar/odom',
+            self.opp_listener_callback,
+            10)
+        
         self.subscription_ego = self.create_subscription(
             Odometry,
             '/ego_racecar/odom',
@@ -49,12 +57,7 @@ class GPOdometryPredictor(Node):
         
         self.pub_drive_ego = self.create_publisher(AckermannDriveStamped, '/drive', 10)
         self.pub_drive_tar = self.create_publisher(AckermannDriveStamped, '/opp_drive', 10)
-        
-        self.subscription_opp = self.create_subscription(
-            Odometry,
-            '/ego_racecar/opp_odom',
-            self.opp_listener_callback,
-            10)
+        self.pred_path_pub = self.create_publisher(Path, '/pred_path', 10)
 
         # # Parameters for the model
         # inducing_points_num = 200
@@ -241,6 +244,7 @@ class GPOdometryPredictor(Node):
         return state
     def ego_listener_callback(self, msg):
         # Listen to ego racecar's odometry message 
+        # print("Inside ego listener callback")
         self.ego_sim_state = self.odom_to_vehicle_state(msg)
         # print("ego car state {}",self.ego_sim_state)
         # use the inputs coming from self.tar_odom_x,y and z for target vehicle pose
@@ -248,28 +252,39 @@ class GPOdometryPredictor(Node):
         gp_tarpred_list = [None] * n_iter
         
         ego_prediction, tar_prediction, tv_pred = None, None, None
-        while True:
-            self.t += 1
-            if self.tar_sim_state.p.s >= 1.9 * self.scenario.length or self.ego_sim_state.p.s >= 1.9 * self.scenario.length:
-                break
-            else:
-                if self.predictor:
-                    # ego_pred is what the mpcc controller predicts
-                    ego_pred = self.gp_mpcc_ego_controller.get_prediction()
-                    # print(ego_pred)
-                    if ego_pred.s is not None:
-                        # based on the output from the mpcc controller, provide the current
-                        # states of the ego and target vehicle to the GP Predictor and get a 
-                        # prediction for the TV, that we use to maneuver
-                        print(tv_pred)
-                        # gp_tarpred_list.append(tv_pred.copy())
-                    # else:
-                    #     gp_tarpred_list.append(None)
-            ego_pred = VehiclePrediction()
-            ego_pred.x = [7.0, 7.0, 7.0, 7.0, 7.0]
-            tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
-            # print(tv_pred.print())
-            tv_pred.print()
+        # while True:
+            # self.t += 1
+            # if self.tar_sim_state.p.s >= 1.9 * self.scenario.length or self.ego_sim_state.p.s >= 1.9 * self.scenario.length:
+            #     break
+            # else:
+            #     if self.predictor:
+            #         # ego_pred is what the mpcc controller predicts
+            #         ego_pred = self.gp_mpcc_ego_controller.get_prediction()
+            #         # print(ego_pred)
+            #         if ego_pred.s is not None:
+            #             # based on the output from the mpcc controller, provide the current
+            #             # states of the ego and target vehicle to the GP Predictor and get a 
+            #             # prediction for the TV, that we use to maneuver
+            #             print(tv_pred)
+            #             # gp_tarpred_list.append(tv_pred.copy())
+            #         # else:
+            #         #     gp_tarpred_list.append(None)
+        ego_pred = VehiclePrediction()
+        ego_pred.x = [7.0, 7.0, 7.0, 7.0, 7.0]
+        self.tar_sim_state.v.v_long = 0.5 
+        tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
+        # print(tv_pred.print())
+        pred_path_msg = Path()
+        pred_path_msg.header.frame_id = 'map'
+        # tv_pred.print()
+        # print (self.tar_sim_state)
+        for i in range(len(ego_pred.x)):
+            pose = PoseStamped()
+            pose.pose.position.x = tv_pred.s[i]
+            pose.pose.position.y = tv_pred.x_tran[i]
+            pred_path_msg.poses.append(pose)
+
+        self.pred_path_pub.publish(pred_path_msg)
 
                 # Target agent
                 # info, tar_acc, tar_pos, tar_steering_angle = self.mpcc_tv_controller.step_racer(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
@@ -307,9 +322,18 @@ class GPOdometryPredictor(Node):
                 
     def opp_listener_callback(self, msg):
         # Extract position data from Odometry message
-        # print("Inside opp listener callback")
-        
+        print("Inside opp listener callback")
         self.tar_sim_state = self.odom_to_vehicle_state(msg)
+        # print(msg.pose.pose.position.x)
+        new_drive_message_target = AckermannDriveStamped()
+        new_drive_message_ego = AckermannDriveStamped()
+        # new_drive_message_target.drive.acceleration = 0
+        new_drive_message_target.drive.steering_angle = 0.1
+        new_drive_message_target.drive.speed = 1.0
+        new_drive_message_ego.drive.speed = 0.0
+        self.pub_drive_tar.publish(new_drive_message_target)
+        self.pub_drive_ego.publish(new_drive_message_ego)
+
         # print("tar car state {}",self.tar_sim_state)
 
 
