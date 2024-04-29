@@ -3,6 +3,7 @@ import gpytorch
 from rclpy.node import Node
 import rclpy
 # import pickle
+import math
 import os
 import numpy as np
 from nav_msgs.msg import Odometry
@@ -202,13 +203,8 @@ class GPOdometryPredictor(Node):
     def odom_to_vehicle_state(self,msg):
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
-        # TODO -@yash and @jai -- done :)
-        # heading angle needs to be corrected - -extract from 
-        # the quaternion and convert to yaw
-        psi = np.atan2(2 * msg.pose.pose.orientation.w * msg.pose.pose.orientation.z, 1 - 2 * (msg.pose.pose.orientation.z ** 2))
+        psi = math.atan2(2 * msg.pose.pose.orientation.w * msg.pose.pose.orientation.z, 1 - 2 * (msg.pose.pose.orientation.z ** 2))
         psi = (psi + 2 * np.pi) % (2 * np.pi)
-        # psi = msg.pose.pose.orientation.w
-        
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         w = msg.twist.twist.angular.z
@@ -229,13 +225,13 @@ class GPOdometryPredictor(Node):
     def ego_listener_callback(self, msg):
         # Listen to ego racecar's odometry message 
         self.ego_sim_state = self.odom_to_vehicle_state(msg)
-        # print("ego car state {}",self.ego_sim_state)
+        print("ego car state {}",self.ego_sim_state)
         # use the inputs coming from self.tar_odom_x,y and z for target vehicle pose
         
         gp_tarpred_list = [None] * n_iter
         
         ego_prediction, tar_prediction, tv_pred = None, None, None
-        while self.t < self.T:
+        while True:
             self.t += 1
             if self.tar_sim_state.p.s >= 1.9 * self.scenario.length or self.ego_sim_state.p.s >= 1.9 * self.scenario.length:
                 break
@@ -248,15 +244,15 @@ class GPOdometryPredictor(Node):
                         # states of the ego and target vehicle to the GP Predictor and get a 
                         # prediction for the TV, that we use to maneuver
                         tv_pred = self.predictor.get_prediction(self.ego_sim_state, self.tar_sim_state, ego_pred)
-                        gp_tarpred_list.append(tv_pred.copy())
-                    else:
-                        gp_tarpred_list.append(None)
+                        # gp_tarpred_list.append(tv_pred.copy())
+                    # else:
+                    #     gp_tarpred_list.append(None)
 
                 # Target agent
-                info, tar_acc, tar_pos, tar_steering_angle = self.mpcc_tv_controller.step_racer(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
-                if not info["success"]:
-                    print(f"TV infeasible")
-                    pass
+                # info, tar_acc, tar_pos, tar_steering_angle = self.mpcc_tv_controller.step_racer(self.tar_sim_state, tv_state=self.ego_sim_state, tv_pred=ego_prediction, policy=self.policy_name)
+                # if not info["success"]:
+                #     print(f"TV infeasible")
+                #     pass
 
                 # Ego agent
                 info, ego_acc, ego_pos, ego_steering_angle = self.gp_mpcc_ego_controller.step_racer(self.ego_sim_state, tv_state=self.tar_sim_state, tv_pred=tar_prediction)
@@ -266,18 +262,23 @@ class GPOdometryPredictor(Node):
                 
                 # TODO - figure out what to do for speed
                 
+                # print("HEREEEE")
+                
                 new_drive_message = AckermannDriveStamped()
-                new_drive_message.drive.acceleration = ego_acc
+                # new_drive_message.drive.acceleration = 0
                 new_drive_message.drive.steering_angle = ego_steering_angle         
-                new_drive_message.drive.speed = 0.15
+                new_drive_message.drive.speed = msg.twist.twist.linear.x + (ego_acc / 30.0)
                 
-                new_drive_message_target = AckermannDriveStamped()
-                new_drive_message_target.drive.acceleration = tar_acc
-                new_drive_message_target.drive.steering_angle = tar_steering_angle
-                new_drive_message_target.drive.speed = 0.15
+                # new_drive_message_target = AckermannDriveStamped()
+                # new_drive_message_target.drive.acceleration = tar_acc
+                # new_drive_message_target.drive.steering_angle = tar_steering_angle
+                # new_drive_message_target.drive.speed = 0.15
                 
-                self.pub_drive_ego.publish(new_drive_message_target)
-                self.pub_drive_tar.publish(new_drive_message_target)
+                print(new_drive_message)
+                
+                self.pub_drive_ego.publish(new_drive_message)
+            
+                # self.pub_drive_tar.publish(new_drive_message_target)
 
 
                 
