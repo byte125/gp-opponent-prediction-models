@@ -39,17 +39,25 @@ RRT::~RRT() {
 }
 
 // Constructor of the RRT class
-uint32_t RRT::pose_to_oneD_coords(const Point &pt) {
+long RRT::pose_to_oneD_coords(const Point &pt) {
   
   long int y_cell = lround(floor((pt.y - center_.y) / res_));
   long int x_cell = lround(floor((pt.x - center_.x) / res_));
   
-  uint32_t return_val = y_cell * map_cell_width_ + x_cell;
+  if (y_cell < 0 || y_cell >= map_cell_height_) {
+    return -1;
+  }
+
+  if (x_cell < 0 || x_cell >= map_cell_width_) {
+    return -1;
+  }
+
+  long int return_val = y_cell * map_cell_width_ + x_cell;
   
   return return_val;
 }
 
-Point RRT::oneD_coords_to_pose(uint32_t idx) {
+Point RRT::oneD_coords_to_pose(long idx) {
   Point pt;
   pt.x = (idx % map_cell_width_) * res_ + center_.x + (res_ / 2.0);
   pt.y = (idx / map_cell_width_) * res_ + center_.y + (res_ / 2.0);
@@ -174,23 +182,24 @@ RRT::RRT() : rclcpp::Node("rrt_node"), gen((std::random_device())()) {
   string pose_topic = "pf/viz/inferred_pose";
   string scan_topic = "scan";
 
-  map_height_ = 8.0; // LENGTH OF MAP ALONG Y AXIS
-  map_width_ = 8.0;  // LENGTH OF MAP ALONG X AXIS
+  map_height_ = 5.0; // LENGTH OF MAP ALONG Y AXIS
+  map_width_ = 3.0;  // LENGTH OF MAP ALONG X AXIS
   res_ = 0.1;
   center_.x = 0.0;
   center_.y = -map_height_ / 2.0;
   max_expansion_dist_ = 0.2;
   goal_thresh_ = 0.1;
-  max_iters_ = 3000;
-  max_total_iters_ = 10000;
+  // max_iters_ = 5000;
+  max_total_iters_ = 5000;
   goal_biasing_prob_ = 0.0;
   neighbor_radius_ = 0.75;
+  car_size_ = 0.5;
   visualize_ = true;
   simulation_ = true;
   run_pp_ = true;
   pp_lookahead_dist_ = 0.5;
-  map_cell_height_ = uint32_t(map_height_ / res_);
-  map_cell_width_ = uint32_t(map_width_ / res_);
+  map_cell_height_ = long(map_height_ / res_);
+  map_cell_width_ = long(map_width_ / res_);
 
   // std::string file_path = "/home/racer/f1tenth_ws/src/F1TenthWS/rrt/waypoints_rrt/locker_wp.csv";
   std::string file_path = "/home/kshitij/f110/test_ws/src/F1TenthWS/rrt/waypoints_rrt/levine_wp_dense.csv";
@@ -208,6 +217,11 @@ RRT::RRT() : rclcpp::Node("rrt_node"), gen((std::random_device())()) {
   scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
       scan_topic, 1,
       std::bind(&RRT::scan_callback, this, std::placeholders::_1));
+
+  opp_path_sub_ = create_subscription<nav_msgs::msg::Path>(
+      "pred_path", 1,
+      std::bind(&RRT::opp_path_callback, this, std::placeholders::_1));
+
   map_pub_ = create_publisher<nav_msgs::msg::OccupancyGrid>("local_map", 10);
   path_pub_ = create_publisher<nav_msgs::msg::Path>("rrt_path", 10);
   drive_pub_ =
@@ -308,6 +322,34 @@ void RRT::scan_callback(
   }
   // TODO: update your occupancy grid
   local_map_.header.stamp = get_clock()->now();
+
+  // geometry_msgs::msg::Pose map_in_car_frame = invert_pose(current_pose_);
+
+
+  for (auto opp_pose_in_map_frame : opp_path_.poses) {
+    auto opp_pose = transform_point_to_new_frame(opp_pose_in_map_frame.pose.position, current_pose_);
+    // auto opp_pose = opp_pose_in_map_frame;
+    // RCLCPP_INFO_STREAM(get_logger(), "Opponent pose " << opp_pose.pose.position.x << " " << opp_pose.pose.position.y);
+    for (double x = opp_pose.pose.position.x - (car_size_ / 2.0); x < opp_pose.pose.position.x + (car_size_ / 2.0); x += res_) {
+      for (double y = opp_pose.pose.position.y - (car_size_ / 2.0); y < opp_pose.pose.position.y + (car_size_ / 2.0); y += res_) {
+        Point p;
+        p.x = x;
+        p.y = y;
+        
+        long p_oneD = pose_to_oneD_coords(p);
+
+        if (p_oneD < 0 || p_oneD > local_map_.data.size()) {
+          continue;
+        }
+        
+        local_map_.data[p_oneD] = OCCUPIED;
+        // RCLCPP_INFO_STREAM(get_logger(), "Occupied " << p_oneD);
+        // RCLCPP_INFO_STREAM(get_logger(), "Occupied " << p.x << " " << p.y);
+
+      }
+    }    
+  }
+
   if (visualize_) {
     map_pub_->publish(local_map_);
   }
@@ -337,6 +379,8 @@ void RRT::rrt_loop(geometry_msgs::msg::Pose current_pose) {
   if (stop_running) {
     return;
   }
+
+  current_pose_ = current_pose;
 
   geometry_msgs::msg::Pose map_in_car_frame = invert_pose(current_pose);
 
@@ -423,8 +467,7 @@ void RRT::rrt_loop(geometry_msgs::msg::Pose current_pose) {
   // TODO: fill in the RRT main loop
   long int total_iters = 0;
 
-  for (int i = 0; i < max_iters_;) {
-    total_iters++;
+  for (int i = 0; i < max_total_iters_; i++) {
     Point sampled_pt = sample(goal_pt);
 
     int nearest_neighbour_idx = nearest(tree, sampled_pt);
@@ -434,22 +477,22 @@ void RRT::rrt_loop(geometry_msgs::msg::Pose current_pose) {
       // RCLCPP_WARN_STREAM(get_logger(), "Discrading node\n");
       continue;
     }
-    i++;
+    // i++;
 
-    if (total_iters > max_total_iters_) {
-      RCLCPP_WARN_STREAM(get_logger(),
-                         "Max number of total iterations exceeded and goal not "
-                         "found. Returning path from nearest node to goal.");
-      // if (visualize_) {
-        // path_pub_->publish(generated_path_);
-      // }
+    // if (total_iters > max_total_iters_) {
+    //   RCLCPP_WARN_STREAM(get_logger(),
+    //                      "Max number of total iterations exceeded and goal not "
+    //                      "found. Returning path from nearest node to goal.");
+    //   // if (visualize_) {
+    //     // path_pub_->publish(generated_path_);
+    //   // }
 
-      // if (run_pp_) {
-        // pub_drive_msg(current_pose);
-      // }
+    //   // if (run_pp_) {
+    //     // pub_drive_msg(current_pose);
+    //   // }
 
-      break;
-    }
+    //   break;
+    // }
 
     new_node.parent = nearest_neighbour_idx;
     new_node.cost = tree[nearest_neighbour_idx].cost + line_cost(tree[nearest_neighbour_idx], new_node);
@@ -779,4 +822,15 @@ std::vector<int> RRT::near(std::vector<RRT_Node> &tree, RRT_Node &node) {
   }
 
   return neighborhood;
+}
+
+void RRT::opp_path_callback(
+    const nav_msgs::msg::Path::ConstSharedPtr path_msg) {
+  // The opponent path callback, update your occupancy grid here
+  // Args:
+  //    path_msg (*Path): pointer to the incoming path message
+  // Returns:
+  //
+  // RCLCPP_WARN_STREAM(get_logger(), "Opponent path received");
+  opp_path_ = *path_msg;
 }

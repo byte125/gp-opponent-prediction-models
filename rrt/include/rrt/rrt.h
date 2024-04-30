@@ -63,6 +63,7 @@ private:
     visualization_msgs::msg::MarkerArray marker_array_;
     nav_msgs::msg::Path generated_path_;
     nav_msgs::msg::Path generated_path_map_frame_;
+    geometry_msgs::msg::Pose current_pose_;
 
     // random generator, use this
     std::mt19937 gen;
@@ -84,17 +85,21 @@ private:
     double goal_biasing_prob_;
     double neighbor_radius_;
     double pp_lookahead_dist_;
+    double car_size_;
     bool visualize_;
     bool simulation_;
     bool run_pp_;
     bool first_run_;
     bool stop_running = false;
+    
     // callbacks
     // where rrt actually happens
     void odom_callback(const nav_msgs::msg::Odometry::ConstSharedPtr odom_msg);
     void pose_callback(const geometry_msgs::msg::PoseStamped::ConstSharedPtr pose_msg);
     // updates occupancy grid
     void scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg);
+    void opp_path_callback(const nav_msgs::msg::Path::ConstSharedPtr path_msg);
+
 
     nav_msgs::msg::OccupancyGrid local_map_;
 
@@ -110,8 +115,8 @@ private:
     bool check_collision(RRT_Node &nearest_node, RRT_Node &new_node);
     bool is_goal(RRT_Node &latest_added_node, const Point& goal_pt);
     void find_path(std::vector<RRT_Node> &tree, RRT_Node &latest_added_node, geometry_msgs::msg::Pose map_frame);
-    uint32_t pose_to_oneD_coords(const Point& pt);
-    Point oneD_coords_to_pose (const uint32_t idx);
+    long pose_to_oneD_coords(const Point& pt);
+    Point oneD_coords_to_pose (const long idx);
     double dist_bw_pts(const Point& a, const Point& b);
     double dist_to_pt(const Point& a);
     void pub_drive_msg(geometry_msgs::msg::Pose current_pose);
@@ -121,6 +126,7 @@ private:
     double cost(std::vector<RRT_Node> &tree, RRT_Node &node);
     double line_cost(RRT_Node &n1, RRT_Node &n2);
     std::vector<int> near(std::vector<RRT_Node> &tree, RRT_Node &node);
+    nav_msgs::msg::Path opp_path_;
 
 };
 
