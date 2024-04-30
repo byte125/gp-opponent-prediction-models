@@ -12,12 +12,12 @@ from barcgp.prediction.trajectory_predictor import GPPredictor  # Ensure this is
 from barcgp.common.utils.scenario_utils import ScenarioDefinition, ScenarioGenerator, ScenarioGenParams
 from barcgp.common.tracks.track_lib import StraightTrack
 from barcgp.common.pytypes import VehicleState, ParametricPose, BodyLinearVelocity, VehiclePrediction,ParametricVelocity
-from barcgp.controllers.MPCC_H2H_approx import MPCC_H2H_approx
+# from barcgp.controllers.MPCC_H2H_approx import MPCC_H2H_approx
 from barcgp.simulation.dynamics_simulator import DynamicsSimulator
 from barcgp.h2h_configs import *
 from barcgp.common.utils.scenario_utils import *
 from barcgp.common.utils.file_utils import *
-from barcgp.common_control import run_pid_warmstart
+# from barcgp.common_control import run_pid_warmstart
 
 from ackermann_msgs.msg import AckermannDriveStamped, AckermannDrive
 from nav_msgs.msg import Path, Odometry
@@ -120,8 +120,8 @@ class GPOdometryPredictor(Node):
         self.tar_dynamics_simulator = DynamicsSimulator(self.t, tar_dynamics_config, track=self.track_obj)
 
         # scenario = straight_track
-        self.tv_history, self.ego_history, self.vehiclestate_history, self.ego_sim_state, self.tar_sim_state, self.egost_list, self.tarst_list = \
-        run_pid_warmstart(self.scenario, self.ego_dynamics_simulator, self.tar_dynamics_simulator, n_iter=n_iter, t=self.t)
+        # self.tv_history, self.ego_history, self.vehiclestate_history, self.ego_sim_state, self.tar_sim_state, self.egost_list, self.tarst_list = \
+        # run_pid_warmstart(self.scenario, self.ego_dynamics_simulator, self.tar_dynamics_simulator, n_iter=n_iter, t=self.t)
 
         self.gp_mpcc_ego_params = MPCCApproxFullModelParams(
             dt=dt,
@@ -193,20 +193,20 @@ class GPOdometryPredictor(Node):
             u_steer_rate_min=-2
         )
         
-        self.gp_mpcc_ego_controller = MPCC_H2H_approx(self.ego_dynamics_simulator.model, self.track_obj, self.gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=self.track_name)
-        self.gp_mpcc_ego_controller.initialize()
+        # self.gp_mpcc_ego_controller = MPCC_H2H_approx(self.ego_dynamics_simulator.model, self.track_obj, self.gp_mpcc_ego_params, name="gp_mpcc_h2h_ego", track_name=self.track_name)
+        # self.gp_mpcc_ego_controller.initialize()
 
-        self.gp_mpcc_ego_controller.set_warm_start(*self.ego_history)
-        print(self.gp_mpcc_ego_controller.get_prediction())
+        # self.gp_mpcc_ego_controller.set_warm_start(*self.ego_history)
+        # print(self.gp_mpcc_ego_controller.get_prediction())
 
-        self.mpcc_tv_params.vectorize_constraints()
-        self.mpcc_tv_controller = MPCC_H2H_approx(self.tar_dynamics_simulator.model, self.track_obj, self.mpcc_tv_params, name="mpcc_h2h_tv", track_name=self.track_name)
-        self.mpcc_tv_controller.initialize()
-        self.mpcc_tv_controller.set_warm_start(*self.tv_history)
+        # self.mpcc_tv_params.vectorize_constraints()
+        # self.mpcc_tv_controller = MPCC_H2H_approx(self.tar_dynamics_simulator.model, self.track_obj, self.mpcc_tv_params, name="mpcc_h2h_tv", track_name=self.track_name)
+        # self.mpcc_tv_controller.initialize()
+        # self.mpcc_tv_controller.set_warm_start(*self.tv_history)
         self.predictor = GPPredictor(N=10, track=self.track_obj, policy_name=self.policy_name, use_GPU=use_GPU, M=self.M, cov_factor=np.sqrt(2))
 
         # Initial prediction is expected to return None, step the simulation and move on
-        self.ego_pred = self.gp_mpcc_ego_controller.get_prediction()
+        # self.ego_pred = self.gp_mpcc_ego_controller.get_prediction()
 
     def random_init(self, stateMin, stateMax):
         s = np.random.uniform(stateMin.p.s, stateMax.p.s)
